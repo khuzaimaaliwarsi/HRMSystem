@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "node scripts/runTests.mjs",
+    "postinstall": "prisma generate",
     "db:verify": "node src/scripts/verifyDb.js",
     "db:schema": "node src/scripts/verifySchema.js",
     "admin:bootstrap": "node src/scripts/bootstrapAdmin.js",
