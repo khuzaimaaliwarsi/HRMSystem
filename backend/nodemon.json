@@ -1,0 +1,17 @@
+{
+  "watch": ["src"],
+  "ext": "js,mjs,json",
+  "ignore": [
+    "tests/**",
+    "scripts/**",
+    "docs/**",
+    "prisma/**",
+    "*.test.js",
+    "*.test.mjs",
+    "*.spec.js",
+    "*.sql",
+    "*.md"
+  ],
+  "delay": "250"
+}
+

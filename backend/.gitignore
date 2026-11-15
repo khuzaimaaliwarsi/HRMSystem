@@ -1,0 +1,29 @@
+# Node dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Prisma generated client / engines if isolated
+# (Note: @prisma/client default lives in node_modules)
+
+# Coverage & testing
+coverage/
+.nyc_output/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
