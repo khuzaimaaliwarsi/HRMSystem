@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#102746"/>
-  <rect x="1" y="1" width="30" height="30" rx="7" stroke="#244A78" stroke-width="2"/>
-  <text x="16" y="21" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">iS</text>
+  <circle cx="16" cy="16" r="16" fill="#1E88E5"/>
+  <circle cx="16" cy="16" r="15" stroke="#1565C0" stroke-width="1"/>
+  <text x="16" y="21.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="-0.5">IS</text>
 </svg>

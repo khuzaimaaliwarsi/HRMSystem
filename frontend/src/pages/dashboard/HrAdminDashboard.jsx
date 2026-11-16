@@ -11,9 +11,12 @@ import Alert from '@/components/common/Alert'
 import QuickHubPanel from '@/components/dashboard/QuickHubPanel'
 import RecentActivityTable from '@/components/dashboard/RecentActivityTable'
 
+const CURRENT_MONTH_NAME = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][new Date().getMonth()] || 'Nov'
+const CURRENT_YEAR_STR = String(new Date().getFullYear())
+
 export function HrAdminDashboard() {
-  const [selectedMonth, setSelectedMonth] = useState('Oct')
-  const [selectedYear, setSelectedYear] = useState('2026')
+  const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH_NAME)
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR_STR)
   const [selectedDept, setSelectedDept] = useState('all')
   const [exportNotice, setExportNotice] = useState(null)
   const [version, setVersion] = useState(0)

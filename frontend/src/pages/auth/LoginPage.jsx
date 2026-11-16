@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { PORTAL_CONFIG } from '@/config/navigation'
 import AppIcon from '@/components/common/AppIcon'
+import BrandLogo from '@/components/common/BrandLogo'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import Alert from '@/components/common/Alert'
@@ -58,9 +59,7 @@ export function LoginPage() {
     <div className="min-h-screen bg-hrms-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-hrms-accent-light selection:text-hrms-primary">
       {/* Top Branding Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-hrms-primary text-white shadow-hrms-card mb-4 border border-hrms-accent">
-          <span className="font-extrabold text-2xl tracking-wider">iS</span>
-        </div>
+        <BrandLogo size="xl" className="mx-auto mb-4" />
         <h1 className="text-2xl sm:text-3xl font-extrabold text-hrms-primary tracking-tight">
           iSysware <span className="text-hrms-accent">HRMS</span>
         </h1>

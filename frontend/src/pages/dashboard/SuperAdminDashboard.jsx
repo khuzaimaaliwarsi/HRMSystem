@@ -11,10 +11,15 @@ import QuickHubPanel from '@/components/dashboard/QuickHubPanel'
 import TalentzoOpenPositionsCard from '@/components/dashboard/TalentzoOpenPositionsCard'
 import RecentActivityTable from '@/components/dashboard/RecentActivityTable'
 import EmployeeFormModal from '@/components/employee/EmployeeFormModal'
+import DateRangePicker from '@/components/common/DateRangePicker'
 import Alert from '@/components/common/Alert'
 
+const NOW = new Date()
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DEFAULT_MONTH_RANGE = `1 ${MONTH_NAMES[NOW.getMonth()]} ${NOW.getFullYear()} - ${new Date(NOW.getFullYear(), NOW.getMonth() + 1, 0).getDate()} ${MONTH_NAMES[NOW.getMonth()]} ${NOW.getFullYear()}`
+
 export function SuperAdminDashboard() {
-  const [selectedDateRange, setSelectedDateRange] = useState('1 Jan 2026 - 31 Dec 2026')
+  const [selectedDateRange, setSelectedDateRange] = useState(DEFAULT_MONTH_RANGE)
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false)
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -148,48 +153,11 @@ export function SuperAdminDashboard() {
       {/* TOP CONTROLS BAR: Date Range Picker + Import + Export + Add Employee      */}
       {/* ========================================================================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Date Filter Dropdown */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span>{selectedDateRange}</span>
-            <svg className="w-3.5 h-3.5 text-slate-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {dateDropdownOpen && (
-            <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-30 text-xs font-medium text-slate-700">
-              {[
-                '1 Jan 2025 - 31 Dec 2025',
-                '1 Jan 2026 - 31 Dec 2026',
-                'Last 30 Days (Rolling)',
-                'Current Quarter (Q4)',
-                'Year to Date (YTD)'
-              ].map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDateRange(range)
-                    setDateDropdownOpen(false)
-                  }}
-                  className={`w-full text-left px-3.5 py-2 hover:bg-slate-50 ${
-                    selectedDateRange === range ? 'text-blue-600 font-bold bg-blue-50/50' : ''
-                  }`}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Dynamic & Custom Calendar Date Filter */}
+        <DateRangePicker
+          value={selectedDateRange}
+          onChange={setSelectedDateRange}
+        />
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2.5">

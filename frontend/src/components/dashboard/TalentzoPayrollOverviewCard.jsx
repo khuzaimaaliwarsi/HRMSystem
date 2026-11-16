@@ -28,31 +28,44 @@ export function TalentzoPayrollOverviewCard({
 
   // Determine active year dynamically from selectedDateRange
   const activeYear = useMemo(() => {
-    if (selectedDateRange?.includes('2025')) return 2025
-    if (selectedDateRange?.includes('2027')) return 2027
-    return 2026
+    const yrMatch = selectedDateRange?.match(/\b(20\d\d)\b/)
+    if (yrMatch) return parseInt(yrMatch[1], 10)
+    return new Date().getFullYear()
   }, [selectedDateRange])
 
   // Sync internal dropdown selection with selectedDateRange
   useEffect(() => {
-    if (selectedDateRange?.includes('2025')) {
-      setSelectedRange('Last Year')
-    } else if (selectedDateRange?.includes('2026')) {
-      setSelectedRange('This Year')
+    if (selectedDateRange?.includes('Last Month')) {
+      setSelectedRange('Last Month')
+    } else if (selectedDateRange?.includes('This Month')) {
+      setSelectedRange('This Month')
     } else if (selectedDateRange?.includes('Last 30 Days')) {
       setSelectedRange('Last 30 Days')
     } else if (selectedDateRange?.includes('Quarter')) {
       setSelectedRange('Current Quarter')
     } else if (selectedDateRange?.includes('YTD')) {
       setSelectedRange('Year to Date')
+    } else if (selectedDateRange?.includes('2025')) {
+      setSelectedRange('Last Year')
+    } else {
+      setSelectedRange('This Year')
     }
   }, [selectedDateRange])
 
-  const [activeMonth, setActiveMonth] = useState(() => (activeYear === 2026 ? 'Nov' : 'Jun'))
+  // Dynamically resolve active month based on selectedDateRange or current date
+  const [activeMonth, setActiveMonth] = useState(() => {
+    const monthMatch = selectedDateRange ? MONTH_NAMES.find((m) => selectedDateRange.includes(m)) : null
+    return monthMatch || MONTH_NAMES[new Date().getMonth()] || 'Nov'
+  })
 
   useEffect(() => {
-    setActiveMonth(activeYear === 2026 ? 'Nov' : 'Jun')
-  }, [activeYear])
+    const monthMatch = selectedDateRange ? MONTH_NAMES.find((m) => selectedDateRange.includes(m)) : null
+    if (monthMatch) {
+      setActiveMonth(monthMatch)
+    } else {
+      setActiveMonth(MONTH_NAMES[new Date().getMonth()] || 'Nov')
+    }
+  }, [selectedDateRange])
 
   useEffect(() => {
     // Sync live payroll runs from PostgreSQL on mount

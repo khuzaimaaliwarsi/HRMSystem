@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { PORTAL_CONFIG } from '@/config/navigation'
 import AppIcon from '@/components/common/AppIcon'
+import BrandLogo from '@/components/common/BrandLogo'
 import { cn } from '@/lib/utils'
 
 export function AppSidebar({
@@ -79,17 +80,22 @@ export function AppSidebar({
       {/* Brand Header */}
       <div
         className={cn(
-          "h-16 border-b border-slate-800/80 flex items-center px-3.5 bg-[#0B132B] shrink-0",
-          collapsed && !isMobile ? "justify-center px-1" : "justify-between"
+          "border-b border-slate-800/80 flex items-center bg-[#0B132B] shrink-0 transition-all",
+          collapsed && !isMobile
+            ? "h-20 flex-col justify-center items-center gap-1.5 px-1 py-2"
+            : "h-16 px-3.5 justify-between"
         )}
       >
         {!collapsed || isMobile ? (
           <>
             <div className="flex items-center gap-2.5 overflow-hidden">
-              {/* Logo Mark: Blue rounded square with building icon */}
-              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/30">
-                <AppIcon name="banking" className="w-4 h-4 text-white" />
-              </div>
+              {/* Logo Mark: Circular Blue Brand Badge */}
+              <BrandLogo
+                size="md"
+                onClick={onToggleCollapse}
+                title="Click logo to collapse sidebar"
+                ariaLabel="iSysware HRMS Logo"
+              />
 
               <div className="flex flex-col text-left">
                 <span className="font-extrabold text-sm tracking-tight text-white leading-tight">
@@ -115,16 +121,27 @@ export function AppSidebar({
             )}
           </>
         ) : (
-          /* Collapsed State Header: Single neat Expand button */
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="w-9 h-9 rounded-xl bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 flex items-center justify-center text-blue-400 hover:text-white transition-all cursor-pointer group shadow-sm"
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-          >
-            <AppIcon name="chevronRight" className="w-4 h-4 text-blue-400 group-hover:text-white transition-colors" />
-          </button>
+          /* Collapsed State Header: Circular Blue Logo AND Expand Arrow (Both click-to-expand) */
+          <>
+            {/* 1. Circular Brand Logo Button */}
+            <BrandLogo
+              size="md"
+              onClick={onToggleCollapse}
+              title="Click logo to expand sidebar"
+              ariaLabel="Expand sidebar with logo"
+            />
+
+            {/* 2. Expand Arrow Button */}
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-blue-600/40 border border-slate-700/60 flex items-center justify-center text-blue-400 hover:text-white transition-all cursor-pointer group shadow-2xs"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <AppIcon name="chevronRight" className="w-3.5 h-3.5 text-blue-400 group-hover:text-white transition-colors" />
+            </button>
+          </>
         )}
 
         {/* Mobile Close Button */}

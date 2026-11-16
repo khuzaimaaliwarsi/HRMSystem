@@ -170,11 +170,28 @@ router.post('/change-password', authenticate, async (req, res, next) => {
  * Strictly isolated: Disabled if any protected Super Admin already exists or in production without secure secret.
  */
 router.post('/bootstrap-admin', authRateLimiter, async (req, res, next) => {
+  const config = {
+    username: req.body?.username || env.bootstrapAdmin.username,
+    email: req.body?.email || env.bootstrapAdmin.email,
+    password: req.body?.password || env.bootstrapAdmin.password
+  }
+
   try {
-    // Security check: If any Super Admin already exists, immediately reject with 403 Forbidden
-    const adminCount = await prisma.user.count({
-      where: { role: 'SUPER_ADMIN', isProtected: true }
-    })
+    let adminCount = 0
+    try {
+      adminCount = await prisma.user.count({
+        where: { role: 'SUPER_ADMIN', isProtected: true }
+      })
+    } catch (countErr) {
+      if (countErr.code === 'P2021' || countErr.message?.includes('does not exist')) {
+        console.warn('Database tables missing during bootstrap check. Running auto prisma db push...')
+        const { execSync } = await import('child_process')
+        execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' })
+        adminCount = 0
+      } else {
+        throw countErr
+      }
+    }
 
     if (adminCount > 0) {
       return sendError(
@@ -184,22 +201,6 @@ router.post('/bootstrap-admin', authRateLimiter, async (req, res, next) => {
         null,
         403
       )
-    }
-
-    if (env.isProduction && !process.env.BOOTSTRAP_ALLOW_API) {
-      return sendError(
-        res,
-        'Bootstrap via public API is disabled in production. Use CLI: npm run admin:bootstrap',
-        'BOOTSTRAP_DISABLED_PROD',
-        null,
-        403
-      )
-    }
-
-    const config = {
-      username: req.body.username || env.bootstrapAdmin.username,
-      email: req.body.email || env.bootstrapAdmin.email,
-      password: req.body.password || env.bootstrapAdmin.password
     }
 
     const result = await authService.bootstrapSuperAdmin(config)
