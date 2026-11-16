@@ -138,6 +138,19 @@ export function EmployeeFormModal({
 
   if (!isOpen) return null
 
+  const safeDepartments = (departments && departments.length > 0)
+    ? departments
+    : employeeService.getDepartments()
+  const safeSubDepartments = (subDepartments && subDepartments.length > 0)
+    ? subDepartments
+    : employeeService.getSubDepartments()
+  const safeTeams = (teams && teams.length > 0)
+    ? teams
+    : employeeService.getTeams()
+  const safeDesignations = (designations && designations.length > 0)
+    ? designations
+    : employeeService.getDesignations()
+
   // Filter managers dynamically according to organizational hierarchy, assigned team leads, and managers
   const eligibleManagers = employeeService.getEligibleReportingManagers(
     formData.departmentId,
@@ -251,12 +264,22 @@ export function EmployeeFormModal({
   const handleSubDepartmentChange = (e) => {
     const newSubDeptId = e.target.value
     setError(null)
-    setFormData((prev) => ({
-      ...prev,
-      subDepartmentId: newSubDeptId,
-      teamId: '',
-      managerId: ''
-    }))
+    const chosenSubDept = safeSubDepartments.find(
+      (sd) => sd.id === newSubDeptId || sd.code === newSubDeptId
+    )
+    setFormData((prev) => {
+      let nextDeptId = prev.departmentId
+      if (chosenSubDept && chosenSubDept.departmentId && !nextDeptId) {
+        nextDeptId = chosenSubDept.departmentId
+      }
+      return {
+        ...prev,
+        departmentId: nextDeptId,
+        subDepartmentId: newSubDeptId,
+        teamId: '',
+        managerId: ''
+      }
+    })
   }
 
   const handleTeamChange = (e) => {
@@ -583,7 +606,7 @@ export function EmployeeFormModal({
                         required
                       >
                         <option value="">Select Department</option>
-                        {departments
+                        {safeDepartments
                           .filter((d) => (d.status || 'Active').toLowerCase() === 'active')
                           .map((d) => (
                             <option key={d.id} value={d.id}>
@@ -606,17 +629,35 @@ export function EmployeeFormModal({
                       className="w-full text-xs px-3 py-2 rounded-md border border-hrms-border bg-white text-hrms-text focus:outline-none focus:ring-1 focus:ring-hrms-accent"
                     >
                       <option value="">No Sub-Department (Direct Dept)</option>
-                      {subDepartments
-                        .filter(
-                          (sd) =>
-                            sd.departmentId === formData.departmentId &&
-                            (sd.status || 'Active').toLowerCase() === 'active'
+                      {(() => {
+                        const selectedDept = safeDepartments.find(
+                          (d) => d.id === formData.departmentId || d.code === formData.departmentId
                         )
-                        .map((sd) => (
-                          <option key={sd.id} value={sd.id}>
-                            {sd.name} ({sd.code})
-                          </option>
-                        ))}
+                        const activeSubDepts = safeSubDepartments.filter(
+                          (sd) => (sd.status || 'Active').toLowerCase() === 'active'
+                        )
+                        const matchingSubDepts = formData.departmentId
+                          ? activeSubDepts.filter((sd) => {
+                              const matchesId = sd.departmentId === formData.departmentId
+                              const matchesSelectedId = selectedDept && (sd.departmentId === selectedDept.id || sd.departmentId === selectedDept.code)
+                              const matchesDeptName = selectedDept && sd.departmentName && sd.departmentName.toLowerCase() === selectedDept.name.toLowerCase()
+                              return matchesId || matchesSelectedId || matchesDeptName
+                            })
+                          : activeSubDepts
+
+                        return matchingSubDepts.map((sd) => {
+                          const pDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
+                          const deptLabel = pDept ? pDept.name : (sd.departmentName || '')
+                          const label = (!formData.departmentId && deptLabel)
+                            ? `${sd.name} (${sd.code}) — ${deptLabel}`
+                            : `${sd.name} (${sd.code})`
+                          return (
+                            <option key={sd.id} value={sd.id}>
+                              {label}
+                            </option>
+                          )
+                        })
+                      })()}
                     </select>
                   </div>
 
@@ -659,38 +700,46 @@ export function EmployeeFormModal({
                       >
                         <option value="">Direct Department Staff (General Team)</option>
                         {(() => {
-                          const allActiveTeams = teams.filter(
+                          const selectedDept = safeDepartments.find(
+                            (d) => d.id === formData.departmentId || d.code === formData.departmentId
+                          )
+                          const allActiveTeams = safeTeams.filter(
                             (t) => (t.status || 'Active').toLowerCase() === 'active'
                           )
                           // Filter teams matching department and optional subDepartmentId
                           const deptMatchingTeams = allActiveTeams.filter((t) => {
-                            if (t.departmentId !== formData.departmentId) return false
+                            const matchesDept = !formData.departmentId || 
+                              t.departmentId === formData.departmentId || 
+                              (selectedDept && (t.departmentId === selectedDept.id || t.departmentId === selectedDept.code))
+                            if (!matchesDept) return false
                             if (formData.subDepartmentId) {
                               return t.subDepartmentId === formData.subDepartmentId
                             }
                             return true
                           })
                           const otherActiveTeams = allActiveTeams.filter(
-                            (t) => t.departmentId !== formData.departmentId
+                            (t) => !deptMatchingTeams.includes(t)
                           )
 
                           if (deptMatchingTeams.length > 0) {
                             return (
                               <>
-                                <optgroup label={formData.subDepartmentId ? "Sub-Department Specific Teams" : "Department Specific Teams"}>
+                                <optgroup label={formData.subDepartmentId ? "Sub-Department Specific Teams" : (formData.departmentId ? "Department Specific Teams" : "Matching Teams")}>
                                   {deptMatchingTeams.map((t) => (
                                     <option key={t.id} value={t.id}>
                                       {t.name} ({t.code})
                                     </option>
                                   ))}
                                 </optgroup>
-                                <optgroup label="Other Active Company Teams">
-                                  {otherActiveTeams.map((t) => (
-                                    <option key={t.id} value={t.id}>
-                                      {t.name} — {t.departmentName || t.departmentId} ({t.code})
-                                    </option>
-                                  ))}
-                                </optgroup>
+                                {otherActiveTeams.length > 0 && (
+                                  <optgroup label="Other Active Company Teams">
+                                    {otherActiveTeams.map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name} — {t.departmentName || t.departmentId} ({t.code})
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
                               </>
                             )
                           }
@@ -723,7 +772,7 @@ export function EmployeeFormModal({
                       required
                     >
                       <option value="">Select Designation</option>
-                      {designations
+                      {safeDesignations
                         .filter((des) => (des.status || 'Active').toLowerCase() === 'active')
                         .map((des) => (
                           <option key={des.id} value={des.id}>

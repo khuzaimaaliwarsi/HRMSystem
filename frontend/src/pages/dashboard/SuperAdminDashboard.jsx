@@ -25,9 +25,10 @@ export function SuperAdminDashboard() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [notification, setNotification] = useState(null)
 
-  const departments = useMemo(() => employeeService.getDepartments(), [])
-  const teams = useMemo(() => employeeService.getTeams(), [])
-  const designations = useMemo(() => employeeService.getDesignations(), [])
+  const [departments, setDepartments] = useState(() => employeeService.getDepartments())
+  const [subDepartments, setSubDepartments] = useState(() => employeeService.getSubDepartments())
+  const [teams, setTeams] = useState(() => employeeService.getTeams())
+  const [designations, setDesignations] = useState(() => employeeService.getDesignations())
   const [employees, setEmployees] = useState(() => employeeService.getEmployees())
   const [candidates, setCandidates] = useState(() => recruitmentService.getCandidates())
   const [vacancies, setVacancies] = useState(() => recruitmentService.getVacancies({ status: 'Open' }))
@@ -35,6 +36,14 @@ export function SuperAdminDashboard() {
   const [payrollRuns, setPayrollRuns] = useState(() => payrollService.getPayrollRuns())
 
   useEffect(() => {
+    const refreshOrgData = () => {
+      setEmployees(employeeService.getEmployees())
+      setDepartments(employeeService.getDepartments())
+      setSubDepartments(employeeService.getSubDepartments())
+      setTeams(employeeService.getTeams())
+      setDesignations(employeeService.getDesignations())
+    }
+
     // Immediate initial sync on dashboard mount from PostgreSQL database
     Promise.allSettled([
       syncOrganization(),
@@ -42,7 +51,7 @@ export function SuperAdminDashboard() {
       syncPayroll(),
       syncLeaves()
     ]).then(() => {
-      setEmployees(employeeService.getEmployees())
+      refreshOrgData()
       setCandidates(recruitmentService.getCandidates())
       setVacancies(recruitmentService.getVacancies({ status: 'Open' }))
       setLeaves(leaveService.getLeaveRequests())
@@ -50,7 +59,7 @@ export function SuperAdminDashboard() {
     })
 
     const unsubEmp = employeeService.subscribe(() => {
-      setEmployees(employeeService.getEmployees())
+      refreshOrgData()
     })
     const unsubRec = recruitmentService.subscribe(() => {
       setCandidates(recruitmentService.getCandidates())
@@ -268,6 +277,7 @@ export function SuperAdminDashboard() {
         onClose={() => setIsAddEmployeeOpen(false)}
         onSubmit={handleCreateEmployeeSubmit}
         departments={departments}
+        subDepartments={subDepartments}
         teams={teams}
         designations={designations}
         allEmployees={employees}
