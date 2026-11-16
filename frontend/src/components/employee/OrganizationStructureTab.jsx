@@ -622,12 +622,12 @@ export function OrganizationStructureTab({
                           <span className="font-bold text-hrms-text block">{sd.name}</span>
                           <span className="text-[11px] text-hrms-muted truncate max-w-sm block">{sd.description}</span>
                         </td>
-                        <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
+                        <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">
                           {(() => {
                             const parentDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
                             const displayDept = parentDept ? `${parentDept.name} (${parentDept.code})` : (sd.departmentName || sd.departmentId || 'Unassigned')
                             return (
-                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-semibold text-[11px]">
+                              <span className="text-slate-800 font-medium text-xs">
                                 {displayDept}
                               </span>
                             )

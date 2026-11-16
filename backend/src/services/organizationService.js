@@ -181,19 +181,32 @@ export const organizationService = {
     const realId = existing.id
 
     const updateData = {}
+    if (data.code !== undefined && data.code.trim()) {
+      const newCode = data.code.trim().toUpperCase()
+      if (newCode !== existing.code) {
+        const dup = await prisma.department.findUnique({ where: { code: newCode } })
+        if (dup && dup.id !== realId) {
+          const error = new Error(`Department with code '${newCode}' already exists`)
+          error.code = 'DUPLICATE_CODE'
+          error.status = 409
+          throw error
+        }
+        updateData.code = newCode
+      }
+    }
     if (data.name !== undefined) updateData.name = data.name.trim()
     if (data.description !== undefined) updateData.description = data.description?.trim() || null
     if (data.status !== undefined) updateData.status = data.status
     if (data.headId !== undefined) {
       if (data.headId) {
-        const head = await prisma.employee.findUnique({ where: { id: data.headId } })
+        const head = await prisma.employee.findFirst({ where: { OR: [{ id: data.headId }, { employeeCode: data.headId }] } })
         if (!head) {
           const error = new Error(`Employee with ID '${data.headId}' not found`)
           error.code = 'INVALID_FOREIGN_KEY'
           error.status = 400
           throw error
         }
-        updateData.headId = data.headId
+        updateData.headId = head.id
       } else {
         updateData.headId = null
       }
@@ -321,26 +334,50 @@ export const organizationService = {
   },
 
   async updateSubDepartment(id, data) {
-    return prisma.subDepartment.update({
-      where: { id },
-      data: {
-        name: data.name !== undefined ? data.name : undefined,
-        description: data.description !== undefined ? data.description : undefined,
-        status: data.status !== undefined ? data.status : undefined,
-        managerId: data.managerId !== undefined ? data.managerId : undefined
+    const existing = await prisma.subDepartment.findFirst({
+      where: { OR: [{ id }, { code: id }] }
+    })
+    if (!existing) {
+      const err = new Error(`Sub-department with ID '${id}' not found`)
+      err.status = 404
+      throw err
+    }
+    const updateData = {}
+    if (data.code !== undefined && data.code.trim()) {
+      const newCode = data.code.trim().toUpperCase()
+      if (newCode !== existing.code) {
+        const dup = await prisma.subDepartment.findUnique({ where: { code: newCode } })
+        if (dup && dup.id !== existing.id) {
+          const error = new Error(`Sub-department with code '${newCode}' already exists`)
+          error.code = 'DUPLICATE_CODE'
+          error.status = 409
+          throw error
+        }
+        updateData.code = newCode
       }
+    }
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.description !== undefined) updateData.description = data.description?.trim() || null
+    if (data.status !== undefined) updateData.status = data.status
+    if (data.managerId !== undefined) updateData.managerId = data.managerId || null
+    if (data.departmentId !== undefined) updateData.departmentId = data.departmentId
+
+    return prisma.subDepartment.update({
+      where: { id: existing.id },
+      data: updateData
     })
   },
 
   async deleteSubDepartment(id, actorUserId = null) {
-    const subDept = await prisma.subDepartment.findUnique({ where: { id } })
+    const subDept = await prisma.subDepartment.findFirst({ where: { OR: [{ id }, { code: id }] } })
     if (!subDept) {
       const err = new Error(`Sub-department with ID '${id}' not found`)
       err.status = 404
       throw err
     }
+    const realId = subDept.id
     const staffCount = await prisma.employee.count({
-      where: { subDepartmentId: id, employmentStatus: { in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
+      where: { subDepartmentId: realId, employmentStatus: { in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
     })
     if (staffCount > 0) {
       const err = new Error(`Cannot delete sub-department '${subDept.name}'. It contains ${staffCount} active employee(s).`)
@@ -348,9 +385,9 @@ export const organizationService = {
       throw err
     }
     try {
-      await prisma.subDepartment.delete({ where: { id } })
+      await prisma.subDepartment.delete({ where: { id: realId } })
     } catch {
-      await prisma.subDepartment.update({ where: { id }, data: { status: 'Inactive' } })
+      await prisma.subDepartment.update({ where: { id: realId }, data: { status: 'Inactive' } })
     }
     return { success: true, message: `Sub-department '${subDept.name}' deleted.` }
   },
@@ -485,11 +522,26 @@ export const organizationService = {
   },
 
   async updateTeam(id, data) {
-    await this.getTeamById(id)
+    const existing = await this.getTeamById(id)
+    const realId = existing.id
 
     const updateData = {}
+    if (data.code !== undefined && data.code.trim()) {
+      const newCode = data.code.trim().toUpperCase()
+      if (newCode !== existing.code) {
+        const dup = await prisma.team.findUnique({ where: { code: newCode } })
+        if (dup && dup.id !== realId) {
+          const error = new Error(`Team with code '${newCode}' already exists`)
+          error.code = 'DUPLICATE_CODE'
+          error.status = 409
+          throw error
+        }
+        updateData.code = newCode
+      }
+    }
     if (data.name !== undefined) updateData.name = data.name.trim()
     if (data.status !== undefined) updateData.status = data.status
+    if (data.departmentId !== undefined) updateData.departmentId = data.departmentId
     if (data.subDepartmentId !== undefined) updateData.subDepartmentId = data.subDepartmentId || null
     if (data.teamLeadId !== undefined) {
       updateData.teamLeadId = data.teamLeadId || null
@@ -499,13 +551,13 @@ export const organizationService = {
           where: {
             employeeId_teamId_role: {
               employeeId: data.teamLeadId,
-              teamId: id,
+              teamId: realId,
               role: 'TEAM_LEAD'
             }
           },
           create: {
             employeeId: data.teamLeadId,
-            teamId: id,
+            teamId: realId,
             role: 'TEAM_LEAD',
             isPrimary: true
           },
@@ -515,7 +567,7 @@ export const organizationService = {
     }
 
     return prisma.team.update({
-      where: { id },
+      where: { id: realId },
       data: updateData,
       include: {
         department: { select: { id: true, code: true, name: true } },
@@ -605,16 +657,39 @@ export const organizationService = {
   },
 
   async updateDesignation(id, data) {
+    const existing = await prisma.designation.findFirst({
+      where: { OR: [{ id }, { code: id }] }
+    })
+    if (!existing) {
+      const err = new Error(`Designation with ID '${id}' not found`)
+      err.status = 404
+      throw err
+    }
+    const updateData = {}
+    if (data.code !== undefined && data.code.trim()) {
+      const newCode = data.code.trim().toUpperCase()
+      if (newCode !== existing.code) {
+        const dup = await prisma.designation.findUnique({ where: { code: newCode } })
+        if (dup && dup.id !== existing.id) {
+          const error = new Error(`Designation with code '${newCode}' already exists`)
+          error.code = 'DUPLICATE_CODE'
+          error.status = 409
+          throw error
+        }
+        updateData.code = newCode
+      }
+    }
+    if (data.title !== undefined) updateData.title = data.title.trim()
+    if (data.name !== undefined && !updateData.title) updateData.title = data.name.trim()
+    if (data.level !== undefined) updateData.level = normalizeDesignationLevel(data.level)
+    if (data.minSalary !== undefined) updateData.minSalary = data.minSalary
+    if (data.maxSalary !== undefined) updateData.maxSalary = data.maxSalary
+    if (data.departmentId !== undefined) updateData.departmentId = data.departmentId || null
+    if (data.status !== undefined) updateData.status = data.status
+
     return prisma.designation.update({
-      where: { id },
-      data: {
-        title: data.title !== undefined ? data.title.trim() : undefined,
-        level: data.level !== undefined ? normalizeDesignationLevel(data.level) : undefined,
-        minSalary: data.minSalary !== undefined ? data.minSalary : undefined,
-        maxSalary: data.maxSalary !== undefined ? data.maxSalary : undefined,
-        departmentId: data.departmentId !== undefined ? data.departmentId : undefined,
-        status: data.status !== undefined ? data.status : undefined
-      },
+      where: { id: existing.id },
+      data: updateData,
       include: {
         department: { select: { id: true, code: true, name: true } }
       }
@@ -622,21 +697,22 @@ export const organizationService = {
   },
 
   async deleteDesignation(id, actorUserId = null) {
-    const desig = await prisma.designation.findUnique({ where: { id } })
+    const desig = await prisma.designation.findFirst({ where: { OR: [{ id }, { code: id }] } })
     if (!desig) {
       const err = new Error(`Designation with ID '${id}' not found`)
       err.status = 404
       throw err
     }
+    const realId = desig.id
     const staffCount = await prisma.employee.count({
-      where: { designationId: id, employmentStatus: { in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
+      where: { designationId: realId, employmentStatus: { in: ['ACTIVE', 'PROBATION', 'NOTICE_PERIOD'] } }
     })
     if (staffCount > 0) {
       const err = new Error(`Cannot delete designation '${desig.title}'. It is held by ${staffCount} employee(s).`)
       err.status = 400
       throw err
     }
-    await prisma.designation.delete({ where: { id } })
+    await prisma.designation.delete({ where: { id: realId } })
     return { success: true, message: `Designation '${desig.title}' deleted.` }
   },
 

@@ -318,17 +318,20 @@ class EmployeeService {
       const { apiClient } = await import('./apiClient.js')
       const isEdit = Boolean(data.id)
       if (isEdit) {
+        const updateCode = (data.code || '').trim().toUpperCase()
         await apiClient.patch(`/organization/departments/${data.id}`, {
+          code: updateCode || undefined,
           name: (data.name || '').trim(),
           description: data.description || '',
           headId: data.headId || null,
           status: data.status || 'Active'
         })
         const list = [...this.getDepartments()]
-        const idx = list.findIndex((d) => d.id === data.id || d.code === data.code)
+        const idx = list.findIndex((d) => d.id === data.id || d.code === data.code || d.code === updateCode)
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
+            code: updateCode || list[idx].code,
             name: (data.name || '').trim(),
             description: data.description || '',
             headId: data.headId || null,
@@ -614,18 +617,25 @@ class EmployeeService {
       const { apiClient } = await import('./apiClient.js')
       const isEdit = Boolean(data.id)
       if (isEdit) {
+        const updateCode = (data.code || '').trim().toUpperCase()
+        const parentDept = data.departmentId ? this.getDepartmentById(data.departmentId) : null
         await apiClient.patch(`/organization/sub-departments/${data.id}`, {
+          code: updateCode || undefined,
           name: (data.name || '').trim(),
+          departmentId: data.departmentId || undefined,
           description: data.description || '',
           managerId: data.managerId || null,
           status: data.status || 'Active'
         })
         const list = [...this.getSubDepartments()]
-        const idx = list.findIndex((sd) => sd.id === data.id || sd.code === data.code)
+        const idx = list.findIndex((sd) => sd.id === data.id || sd.code === data.code || sd.code === updateCode)
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
+            code: updateCode || list[idx].code,
             name: (data.name || '').trim(),
+            departmentId: data.departmentId || list[idx].departmentId,
+            departmentName: parentDept ? parentDept.name : (list[idx].departmentName || 'Unknown Department'),
             description: data.description || '',
             managerId: data.managerId || null,
             status: data.status || list[idx].status || 'Active',
@@ -934,18 +944,25 @@ class EmployeeService {
       const { apiClient } = await import('./apiClient.js')
       const isEdit = Boolean(data.id)
       if (isEdit) {
+        const updateCode = (data.code || '').trim().toUpperCase()
+        const parentDept = data.departmentId ? this.getDepartmentById(data.departmentId) : null
         await apiClient.patch(`/organization/teams/${data.id}`, {
+          code: updateCode || undefined,
           name: (data.name || '').trim(),
+          departmentId: data.departmentId || undefined,
           subDepartmentId: data.subDepartmentId || null,
           teamLeadId: data.teamLeadId || null,
           status: data.status || 'Active'
         })
         const list = [...this.getTeams()]
-        const idx = list.findIndex((t) => t.id === data.id || t.code === data.code)
+        const idx = list.findIndex((t) => t.id === data.id || t.code === data.code || t.code === updateCode)
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
+            code: updateCode || list[idx].code,
             name: (data.name || '').trim(),
+            departmentId: data.departmentId || list[idx].departmentId,
+            departmentName: parentDept ? parentDept.name : (list[idx].departmentName || 'Unknown Department'),
             subDepartmentId: data.subDepartmentId || null,
             teamLeadId: data.teamLeadId || null,
             status: data.status || list[idx].status || 'Active',
@@ -1722,17 +1739,20 @@ class EmployeeService {
       const isEdit = Boolean(data.id)
       const dept = data.departmentId ? this.getDepartmentById(data.departmentId) : null
       if (isEdit) {
+        const updateCode = (data.code || '').trim().toUpperCase()
         await apiClient.patch(`/organization/designations/${data.id}`, {
+          code: updateCode || undefined,
           title: (data.name || '').trim(),
           departmentId: data.departmentId || null,
           level: normalizeDesignationLevel(data.level),
           status: data.status || 'Active'
         })
         const list = [...this.getDesignations()]
-        const idx = list.findIndex((d) => d.id === data.id || d.code === data.code)
+        const idx = list.findIndex((d) => d.id === data.id || d.code === data.code || d.code === updateCode)
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
+            code: updateCode || list[idx].code,
             name: (data.name || '').trim(),
             title: (data.name || '').trim(),
             departmentId: data.departmentId || null,
