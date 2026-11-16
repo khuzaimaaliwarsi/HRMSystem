@@ -36,6 +36,9 @@
     html {
       zoom: 0.8;
     }
+    body, #root {
+      min-height: 125vh;
+    }
   }
   
   body {

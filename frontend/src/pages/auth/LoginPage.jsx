@@ -56,7 +56,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-hrms-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-hrms-accent-light selection:text-hrms-primary">
+    <div className="min-h-[125vh] bg-hrms-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-hrms-accent-light selection:text-hrms-primary">
       {/* Top Branding Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <BrandLogo size="xl" className="mx-auto mb-4" />
