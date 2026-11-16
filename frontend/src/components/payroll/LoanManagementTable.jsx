@@ -61,15 +61,15 @@ export function LoanManagementTable({
           <tbody className="divide-y divide-slate-100 font-mono">
             {loans.map((l) => {
               const isSuperAdmin = String(currentUser?.role || '').toLowerCase() === 'super_admin'
-              const isSelf = currentUser && (currentUser.employeeId === l.employeeId || currentUser.id === l.employeeId)
+              const isSelf = currentUser && (currentUser.employeeId === l.employeeId || currentUser.id === l.employeeId || currentUser.employeeId === l.employeeCode)
               const blockSelf = isSelf && !isSuperAdmin
-              const isPending = l.status === 'Pending Super Admin Review'
+              const isPending = l.status === 'Pending Super Admin Review' || l.status === 'PENDING' || l.status === 'APPLIED'
 
               return (
-                <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
+                <tr key={l.cuid || l.loanNumber || l.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="px-4 py-3 font-sans">
                     <div className="font-bold text-slate-900">{l.employeeName}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{l.employeeId} • {l.id}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{l.employeeCode || l.employeeId} • {l.loanNumber || l.id}</div>
                   </td>
                   <td className="px-4 py-3 font-sans">
                     <span className="font-semibold text-slate-800">{l.loanType}</span>
@@ -94,7 +94,7 @@ export function LoanManagementTable({
                     PKR {(l.outstandingBalance || 0).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 font-sans">
-                    <StatusBadge status={l.status} />
+                    <StatusBadge status={l.status === 'PENDING' ? 'Pending Super Admin Review' : l.status} />
                   </td>
                   {canApprove && (
                     <td className="px-4 py-3 text-right font-sans">
@@ -104,7 +104,7 @@ export function LoanManagementTable({
                             type="button"
                             size="sm"
                             variant="primary"
-                            onClick={() => onApproveLoan(l.id)}
+                            onClick={() => onApproveLoan(l.cuid || l.id)}
                             className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
                           >
                             Disburse
@@ -113,7 +113,7 @@ export function LoanManagementTable({
                             type="button"
                             size="sm"
                             variant="danger"
-                            onClick={() => onRejectLoan(l.id)}
+                            onClick={() => onRejectLoan(l.cuid || l.id)}
                             className="text-xs cursor-pointer"
                           >
                             Decline

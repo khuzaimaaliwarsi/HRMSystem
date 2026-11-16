@@ -346,13 +346,15 @@ export default function EmployeePayrollPage() {
                         <td className="py-3 px-4 text-slate-500 max-w-xs truncate">{l.reason || l.purpose || 'Personal Requirement'}</td>
                         <td className="py-3 px-4">
                           <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            (l.status || '').toUpperCase() === 'ACTIVE'
+                            ['ACTIVE', 'DISBURSED', 'APPROVED'].includes((l.status || '').toUpperCase())
                               ? 'bg-emerald-100 text-emerald-800'
-                              : (l.status || '').toUpperCase() === 'APPLIED' || (l.status || '').toUpperCase() === 'PENDING'
+                              : ['APPLIED', 'PENDING', 'PENDING SUPER ADMIN REVIEW'].includes((l.status || '').toUpperCase()) || (l.status || '').toLowerCase().includes('pending')
                               ? 'bg-amber-100 text-amber-800'
+                              : (l.status || '').toUpperCase() === 'REJECTED'
+                              ? 'bg-rose-100 text-rose-800'
                               : 'bg-slate-100 text-slate-700'
                           }`}>
-                            {l.status}
+                            {l.status === 'PENDING' ? 'Pending Review' : l.status}
                           </span>
                         </td>
                       </tr>
@@ -413,7 +415,9 @@ export default function EmployeePayrollPage() {
         <LoanRequestModal
           isOpen={isLoanModalOpen}
           onClose={() => setIsLoanModalOpen(false)}
-          onLoanCreated={loadData}
+          onLoanCreated={() => {
+            syncPayroll().then(loadData).catch(() => loadData());
+          }}
         />
       )}
     </div>

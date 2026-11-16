@@ -12,6 +12,42 @@ import { INITIAL_LOANS } from '../mocks/payrollData.js'
 
 const STORAGE_KEY = 'isysware_hrms_f06_loans_v1'
 
+export function mapBackendLoan(l) {
+  const empCode = l.employee?.employeeCode || (typeof l.employeeId === 'string' && l.employeeId.startsWith('EMP-') ? l.employeeId : undefined)
+  const empId = empCode || l.employee?.id || l.employeeId
+  return {
+    id: l.loanNumber || l.id,
+    cuid: l.id,
+    loanNumber: l.loanNumber || l.id,
+    employeeId: empId,
+    employeeCuid: l.employee?.id || l.employeeId,
+    employeeCode: empCode,
+    employeeName: l.employee ? `${l.employee.firstName} ${l.employee.lastName}`.trim() : (l.employeeName || empId),
+    loanType: l.loanType === 'SALARY_ADVANCE' ? 'Salary Advance'
+      : l.loanType === 'PERSONAL_LOAN' ? 'Personal Loan'
+      : l.loanType === 'EMERGENCY_LOAN' ? 'Emergency Loan'
+      : l.loanType === 'EDUCATION_LOAN' ? 'Education Loan'
+      : (l.loanType ? String(l.loanType).replace(/_/g, ' ') : 'Personal Loan'),
+    principalAmount: Number(l.principalAmount || 0),
+    installmentAmount: Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount || 0),
+    totalInstallments: Number(l.repaymentMonths || l.totalInstallments || 1),
+    installmentsPaid: Number(l.paidInstallments || l.installmentsPaid || (l.repayments ? l.repayments.length : 0)),
+    repaidAmount: Number(l.totalRepaidAmount || l.totalRepaid || l.repaidAmount || 0),
+    outstandingBalance: Number(l.remainingBalance || l.outstandingBalance || l.principalAmount || 0),
+    status: l.status === 'PENDING' ? 'Pending Super Admin Review'
+      : l.status === 'APPROVED' ? 'Approved'
+      : l.status === 'DISBURSED' ? 'Active'
+      : l.status === 'REJECTED' ? 'Rejected'
+      : l.status === 'REPAID' ? 'Closed'
+      : l.status === 'DEFAULTED' ? 'Defaulted'
+      : l.status === 'CANCELLED' ? 'Cancelled'
+      : l.status,
+    reason: l.remarks || l.reason || '',
+    appliedDate: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 10) : (l.appliedDate || new Date().toISOString().slice(0, 10)),
+    rawBackend: l
+  }
+}
+
 class LoanService {
   constructor() {
     this.listeners = new Set()
@@ -20,18 +56,20 @@ class LoanService {
   }
 
   _getItem(key, defaultVal) {
+    if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const item = window.localStorage.getItem(key)
-        return item ? JSON.parse(item) : defaultVal
+        if (item) return JSON.parse(item)
       }
     } catch {
       // Fallback
     }
-    return this.memoryStorage[key] !== undefined ? this.memoryStorage[key] : defaultVal
+    return defaultVal !== undefined ? defaultVal : []
   }
 
   _setItem(key, value) {
+    this.memoryStorage[key] = value
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(key, JSON.stringify(value))
@@ -39,7 +77,6 @@ class LoanService {
     } catch {
       // Fallback
     }
-    this.memoryStorage[key] = value
   }
 
   _initialize() {
@@ -90,21 +127,56 @@ class LoanService {
 
     // Role-based scoping: Employee can only see own loans; Manager sees own loans
     if (requestingUser?.role === 'employee' || requestingUser?.role === 'manager') {
-      const myId = requestingUser.employeeId || requestingUser.id
-      list = list.filter((l) => l.employeeId === myId)
+      const myId = requestingUser.employeeId || requestingUser.id || requestingUser.employeeCode
+      if (myId) {
+        list = list.filter((l) => l.employeeId === myId || l.employeeCode === myId || l.employeeCuid === myId)
+      }
     }
 
     if (filters.employeeId) {
-      list = list.filter((l) => l.employeeId === filters.employeeId)
+      const targetId = filters.employeeId
+      list = list.filter((l) => l.employeeId === targetId || l.employeeCode === targetId || l.employeeCuid === targetId)
     }
     if (filters.status && filters.status !== 'all') {
-      list = list.filter((l) => l.status.toLowerCase() === filters.status.toLowerCase())
+      const s = filters.status.toLowerCase()
+      list = list.filter((l) => {
+        const ls = (l.status || '').toLowerCase()
+        if (ls === s) return true
+        if (s === 'pending' && (ls.includes('pending') || ls === 'applied')) return true
+        if (s === 'active' && (ls === 'disbursed' || ls === 'active')) return true
+        if (s === 'closed' && (ls === 'repaid' || ls === 'closed')) return true
+        if (s === 'rejected' && ls === 'rejected') return true
+        return false
+      })
     }
     if (filters.loanType && filters.loanType !== 'all') {
-      list = list.filter((l) => l.loanType.toLowerCase() === filters.loanType.toLowerCase())
+      const lt = filters.loanType.toLowerCase().replace(/_/g, ' ')
+      list = list.filter((l) => {
+        const itemLt = (l.loanType || '').toLowerCase().replace(/_/g, ' ')
+        return itemLt === lt || itemLt.includes(lt) || lt.includes(itemLt)
+      })
     }
 
     return list
+  }
+
+  async fetchLoans(filters = {}) {
+    if (typeof window !== 'undefined') {
+      try {
+        const { apiClient } = await import('./apiClient.js')
+        const raw = await apiClient.get('/payroll/loans')
+        if (Array.isArray(raw)) {
+          const mapped = raw.map(mapBackendLoan)
+          this.memoryStorage[STORAGE_KEY] = mapped
+          this._setItem(STORAGE_KEY, mapped)
+          this._notify()
+          return this.getLoans(filters)
+        }
+      } catch (err) {
+        console.warn('[loanService] fetchLoans failed:', err)
+      }
+    }
+    return this.getLoans(filters)
   }
 
   getEmployeeLoans(employeeId, requestingUser = null) {
@@ -116,7 +188,7 @@ class LoanService {
    */
   getLoanById(loanId) {
     const list = this._getItem(STORAGE_KEY, INITIAL_LOANS)
-    return list.find((l) => l.id === loanId) || null
+    return list.find((l) => l.id === loanId || l.loanNumber === loanId || l.cuid === loanId) || null
   }
 
   /**
@@ -247,7 +319,7 @@ class LoanService {
    */
   getActiveDeductionForEmployee(employeeId, period) {
     const list = this._getItem(STORAGE_KEY, INITIAL_LOANS)
-    const activeLoans = list.filter((l) => l.employeeId === employeeId && l.status === 'Active' && l.outstandingBalance > 0)
+    const activeLoans = list.filter((l) => (l.employeeId === employeeId || l.employeeCode === employeeId || l.employeeCuid === employeeId) && (l.status === 'Active' || l.status === 'DISBURSED') && l.outstandingBalance > 0)
     
     let totalDeduction = 0
     const loanDeductions = []

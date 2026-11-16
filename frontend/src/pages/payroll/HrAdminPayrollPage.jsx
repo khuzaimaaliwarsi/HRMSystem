@@ -359,7 +359,9 @@ export default function HrAdminPayrollPage() {
           isOpen={isLoanModalOpen}
           onClose={() => setIsLoanModalOpen(false)}
           employees={employees}
-          onLoanCreated={loadData}
+          onLoanCreated={() => {
+            syncPayroll().then(loadData).catch(() => loadData());
+          }}
         />
       )}
 

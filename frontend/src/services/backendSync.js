@@ -20,7 +20,7 @@ import { leavePolicyService } from './leavePolicyService.js'
 import { leaveBalanceService } from './leaveBalanceService.js'
 import { payrollService } from './payrollService.js'
 import { compensationService } from './compensationService.js'
-import { loanService } from './loanService.js'
+import { loanService, mapBackendLoan } from './loanService.js'
 import { salaryRevisionService } from './salaryRevisionService.js'
 import { expenseService } from './expenseService.js'
 import { recruitmentService } from './recruitmentService.js'
@@ -63,6 +63,9 @@ export async function syncOrganization() {
         headName: d.head ? `${d.head.firstName} ${d.head.lastName}` : (d.headEmployee ? `${d.headEmployee.firstName} ${d.headEmployee.lastName}` : (d.headName || 'Unassigned'))
       }))
       employeeService.memoryStorage['isysware_hrms_f02_departments_v1'] = depts
+      if (typeof employeeService._setItem === 'function') {
+        employeeService._setItem('isysware_hrms_f02_departments_v1', depts)
+      }
     }
 
     if (teamRes.status === 'fulfilled' && Array.isArray(teamRes.value)) {
@@ -78,6 +81,9 @@ export async function syncOrganization() {
         leadName: t.teamLead ? `${t.teamLead.firstName} ${t.teamLead.lastName}` : (t.leadEmployee ? `${t.leadEmployee.firstName} ${t.leadEmployee.lastName}` : (t.leadName || 'Unassigned'))
       }))
       employeeService.memoryStorage['isysware_hrms_f02_teams_v1'] = teams
+      if (typeof employeeService._setItem === 'function') {
+        employeeService._setItem('isysware_hrms_f02_teams_v1', teams)
+      }
     }
 
     if (desigRes.status === 'fulfilled' && Array.isArray(desigRes.value)) {
@@ -94,6 +100,9 @@ export async function syncOrganization() {
         maxSalary: dg.maxSalary ? Number(dg.maxSalary) : 0
       }))
       employeeService.memoryStorage['isysware_hrms_f02_designations_v1'] = desigs
+      if (typeof employeeService._setItem === 'function') {
+        employeeService._setItem('isysware_hrms_f02_designations_v1', desigs)
+      }
     }
 
     if (subDeptRes.status === 'fulfilled' && Array.isArray(subDeptRes.value)) {
@@ -113,6 +122,9 @@ export async function syncOrganization() {
         }
       })
       employeeService.memoryStorage['isysware_hrms_f02_sub_departments_v1'] = subDepts
+      if (typeof employeeService._setItem === 'function') {
+        employeeService._setItem('isysware_hrms_f02_sub_departments_v1', subDepts)
+      }
       employeeService._notify()
     }
 
@@ -156,6 +168,10 @@ export async function syncOrganization() {
         }
       })
       employeeService.memoryStorage['isysware_hrms_f02_employees_v1'] = emps
+      if (typeof employeeService._setItem === 'function') {
+        employeeService._setItem('isysware_hrms_f02_employees_v1', emps)
+      }
+      employeeService._notify()
     }
 
     employeeService._notify()
@@ -952,33 +968,12 @@ export async function syncPayroll() {
       compensationService.memoryStorage['isysware_hrms_f06_emp_allowances_v1'] = rawEmpAllowances
     }
 
-    if (loansRes.status === 'fulfilled' && Array.isArray(loansRes.value)) {
-      const mappedLoans = loansRes.value.map((l) => ({
-        id: l.id,
-        employeeId: l.employee?.id || l.employeeId,
-        employeeCode: l.employee?.employeeCode,
-        employeeName: l.employee ? `${l.employee.firstName} ${l.employee.lastName}`.trim() : (l.employeeName || l.employeeId),
-        loanType: l.loanType,
-        principalAmount: Number(l.principalAmount || 0),
-        installmentAmount: Number(l.monthlyDeduction || l.installmentAmount || 0),
-        totalInstallments: Number(l.repaymentMonths || l.totalInstallments || 1),
-        installmentsPaid: Number(l.paidInstallments || l.installmentsPaid || 0),
-        repaidAmount: Number(l.totalRepaid || l.repaidAmount || 0),
-        outstandingBalance: Number(l.remainingBalance || l.outstandingBalance || l.principalAmount || 0),
-        status: l.status === 'PENDING' ? 'Pending Super Admin Review'
-          : l.status === 'APPROVED' ? 'Approved'
-            : l.status === 'DISBURSED' ? 'Active'
-              : l.status === 'REJECTED' ? 'Rejected'
-                : l.status === 'REPAID' ? 'Closed'
-                  : l.status === 'DEFAULTED' ? 'Defaulted'
-                    : l.status === 'CANCELLED' ? 'Cancelled'
-                      : l.status,
-        reason: l.remarks || l.reason || '',
-        appliedDate: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 10) : l.appliedDate,
-        rawBackend: l
-      }))
+    const rawLoans = loansRes.status === 'fulfilled' ? unwrapArray(loansRes.value) : null
+    if (Array.isArray(rawLoans)) {
+      const mappedLoans = rawLoans.map(mapBackendLoan)
       payrollService.memoryStorage['isysware_hrms_f06_loans_v1'] = mappedLoans
       loanService.memoryStorage['isysware_hrms_f06_loans_v1'] = mappedLoans
+      loanService._setItem('isysware_hrms_f06_loans_v1', mappedLoans)
       loanService._notify()
     }
 

@@ -14,17 +14,43 @@ export const loanService = {
    */
   async getLoans(filters = {}, requestingUser = null) {
     const where = {}
-    if (filters.status) where.status = filters.status
-    if (filters.employeeId) where.employeeId = filters.employeeId
-    if (filters.loanType) where.loanType = filters.loanType
+    if (filters.status && filters.status !== 'all') {
+      const s = String(filters.status).toUpperCase()
+      const normalizedStatus = s.includes('PENDING') ? 'PENDING'
+        : s.includes('APPROV') ? 'APPROVED'
+        : s.includes('DISBURS') || s.includes('ACTIVE') ? 'DISBURSED'
+        : s.includes('REJECT') ? 'REJECTED'
+        : s.includes('REPAID') || s.includes('CLOSE') ? 'REPAID'
+        : s
+      where.status = normalizedStatus
+    }
+    if (filters.loanType && filters.loanType !== 'all') where.loanType = filters.loanType
 
     if (requestingUser) {
       if (requestingUser.role === 'EMPLOYEE') {
-        if (!requestingUser.employee?.id) return []
-        where.employeeId = requestingUser.employee.id
-      } else if (requestingUser.role === 'DEPT_MANAGER' && requestingUser.employee?.departmentId) {
-        where.employee = { departmentId: requestingUser.employee.departmentId }
+        const empId = requestingUser.employee?.id || requestingUser.employeeId
+        if (!empId) return []
+        where.OR = [
+          { employeeId: empId },
+          { employee: { employeeCode: requestingUser.employee?.employeeCode || empId } }
+        ]
+      } else if (requestingUser.role === 'DEPT_MANAGER') {
+        if (filters.employeeId) {
+          where.OR = [
+            { employeeId: filters.employeeId },
+            { employee: { employeeCode: filters.employeeId } }
+          ]
+        } else if (requestingUser.employee?.departmentId) {
+          where.employee = { departmentId: requestingUser.employee.departmentId }
+        }
       }
+    }
+
+    if (filters.employeeId && !where.OR) {
+      where.OR = [
+        { employeeId: filters.employeeId },
+        { employee: { employeeCode: filters.employeeId } }
+      ]
     }
 
     return prisma.employeeLoan.findMany({
@@ -53,8 +79,10 @@ export const loanService = {
    * Retrieves a single loan with repayment transaction history.
    */
   async getLoanById(id, requestingUser = null) {
-    const loan = await prisma.employeeLoan.findUnique({
-      where: { id },
+    const loan = await prisma.employeeLoan.findFirst({
+      where: {
+        OR: [{ id }, { loanNumber: id }]
+      },
       include: {
         employee: {
           select: {
@@ -230,8 +258,10 @@ export const loanService = {
       throw error
     }
 
-    const loan = await prisma.employeeLoan.findUnique({
-      where: { id: loanId },
+    const loan = await prisma.employeeLoan.findFirst({
+      where: {
+        OR: [{ id: loanId }, { loanNumber: loanId }]
+      },
       include: { employee: true }
     })
 
@@ -266,7 +296,7 @@ export const loanService = {
     }
 
     return prisma.employeeLoan.update({
-      where: { id: loanId },
+      where: { id: loan.id },
       data: {
         status: decision,
         approvedById: reviewerUser.id,
@@ -285,7 +315,11 @@ export const loanService = {
    * Activates loan for monthly payroll deduction recovery.
    */
   async disburseLoan(loanId, actorUser, disbursementData = {}) {
-    const loan = await prisma.employeeLoan.findUnique({ where: { id: loanId } })
+    const loan = await prisma.employeeLoan.findFirst({
+      where: {
+        OR: [{ id: loanId }, { loanNumber: loanId }]
+      }
+    })
     if (!loan) {
       const error = new Error(`Loan '${loanId}' not found.`)
       error.code = 'NOT_FOUND'
@@ -312,7 +346,7 @@ export const loanService = {
     }
 
     return prisma.employeeLoan.update({
-      where: { id: loanId },
+      where: { id: loan.id },
       data: {
         status: 'DISBURSED',
         disbursementDate: new Date(disbursementData.disbursementDate || new Date()),
@@ -340,7 +374,11 @@ export const loanService = {
     }
 
     return prisma.$transaction(async (tx) => {
-      const loan = await tx.employeeLoan.findUnique({ where: { id: loanId } })
+      const loan = await tx.employeeLoan.findFirst({
+        where: {
+          OR: [{ id: loanId }, { loanNumber: loanId }]
+        }
+      })
       if (!loan) {
         const error = new Error(`Loan '${loanId}' not found.`)
         error.code = 'NOT_FOUND'
@@ -355,7 +393,7 @@ export const loanService = {
 
       const repayment = await tx.loanRepayment.create({
         data: {
-          loanId,
+          loanId: loan.id,
           payrollEntryId,
           amount: new Prisma.Decimal(actualDeduct.toFixed(2)),
           balanceAfter: new Prisma.Decimal(newBalance.toFixed(2)),
@@ -365,6 +403,13 @@ export const loanService = {
       })
 
       await tx.employeeLoan.update({
+        where: { id: loan.id },
+        data: {
+          totalRepaidAmount: new Prisma.Decimal(newTotalRepaid.toFixed(2)),
+          remainingBalance: new Prisma.Decimal(newBalance.toFixed(2)),
+          status: newBalance <= 0 ? 'REPAID' : loan.status
+        }
+      })
         where: { id: loanId },
         data: {
           remainingBalance: new Prisma.Decimal(newBalance.toFixed(2)),

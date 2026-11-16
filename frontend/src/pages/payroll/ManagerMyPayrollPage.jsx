@@ -323,7 +323,9 @@ export default function ManagerMyPayrollPage() {
         <LoanRequestModal
           isOpen={isLoanModalOpen}
           onClose={() => setIsLoanModalOpen(false)}
-          onLoanCreated={loadData}
+          onLoanCreated={() => {
+            syncPayroll().then(loadData).catch(() => loadData());
+          }}
         />
       )}
     </div>

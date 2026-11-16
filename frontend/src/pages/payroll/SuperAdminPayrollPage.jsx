@@ -294,9 +294,11 @@ export default function SuperAdminPayrollPage() {
   const handleApproveLoan = async (loanId) => {
     setActionMessage(null);
     try {
-      await apiClient.patch(`/payroll/loans/${loanId}/review`, { decision: 'APPROVED' });
-      await apiClient.post(`/payroll/loans/${loanId}/disburse`, {});
-      setActionMessage({ type: 'success', text: `Loan ${loanId} approved and marked disbursed.` });
+      const loan = loans.find((l) => l.id === loanId || l.loanNumber === loanId || l.cuid === loanId);
+      const targetId = loan?.cuid || loan?.id || loanId;
+      await apiClient.patch(`/payroll/loans/${targetId}/review`, { decision: 'APPROVED' });
+      await apiClient.post(`/payroll/loans/${targetId}/disburse`, {});
+      setActionMessage({ type: 'success', text: `Loan ${loan?.loanNumber || loanId} approved and marked disbursed.` });
       await syncPayroll();
       loadData();
     } catch (err) {
@@ -307,8 +309,10 @@ export default function SuperAdminPayrollPage() {
   const handleRejectLoan = async (loanId) => {
     setActionMessage(null);
     try {
-      await apiClient.patch(`/payroll/loans/${loanId}/review`, { decision: 'REJECTED', remarks: 'Declined by Administrator' });
-      setActionMessage({ type: 'success', text: `Loan ${loanId} declined.` });
+      const loan = loans.find((l) => l.id === loanId || l.loanNumber === loanId || l.cuid === loanId);
+      const targetId = loan?.cuid || loan?.id || loanId;
+      await apiClient.patch(`/payroll/loans/${targetId}/review`, { decision: 'REJECTED', remarks: 'Declined by Administrator' });
+      setActionMessage({ type: 'success', text: `Loan ${loan?.loanNumber || loanId} declined.` });
       await syncPayroll();
       loadData();
     } catch (err) {
@@ -367,7 +371,7 @@ export default function SuperAdminPayrollPage() {
     { id: 'revisions', label: 'Salary Revisions', icon: 'fa-arrow-trend-up', badge: revisions.filter(r => r.status === 'PENDING_APPROVAL').length },
     { id: 'allowances', label: 'Allowances & Benefits', icon: 'fa-gift' },
     { id: 'commissions', label: 'Sales Commissions', icon: 'fa-chart-line' },
-    { id: 'loans', label: 'Loans & Advances', icon: 'fa-hand-holding-dollar', badge: loans.filter(l => l.status === 'APPLIED').length },
+    { id: 'loans', label: 'Loans & Advances', icon: 'fa-hand-holding-dollar', badge: loans.filter(l => l.status === 'Pending Super Admin Review' || l.status === 'PENDING' || l.status === 'APPLIED').length },
     { id: 'tax', label: 'Section 149 Tax', icon: 'fa-scale-balanced' },
     { id: 'payments', label: 'Bank Advice & Payments', icon: 'fa-building-columns' },
   ];
@@ -580,7 +584,9 @@ export default function SuperAdminPayrollPage() {
           isOpen={isLoanModalOpen}
           onClose={() => setIsLoanModalOpen(false)}
           employees={employees}
-          onLoanCreated={loadData}
+          onLoanCreated={() => {
+            syncPayroll().then(loadData).catch(() => loadData());
+          }}
         />
       )}
 

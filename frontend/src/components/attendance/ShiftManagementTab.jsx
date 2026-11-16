@@ -158,16 +158,31 @@ export function ShiftManagementTab({
                       </div>
                     </td>
                     <td className="p-3">
-                      <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold border ${
-                        s.type === 'Overnight' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                        s.type === 'Flexible' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        s.type === 'Part-Time' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                        s.type === 'Hourly' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        s.type === 'Rotating' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                        'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}>
-                        {s.type}
-                      </span>
+                      {(() => {
+                        const rawType = String(s.type || '').toUpperCase().replace('-', '_')
+                        const isOvernight = rawType === 'OVERNIGHT' || s.type === 'Overnight'
+                        const isFlexible = rawType === 'FLEXIBLE' || s.type === 'Flexible'
+                        const isPartTime = rawType === 'PART_TIME' || s.type === 'Part-Time'
+                        const isHourly = rawType === 'HOURLY' || s.type === 'Hourly'
+                        const isRotating = rawType === 'ROTATING' || s.type === 'Rotating'
+                        const label = isOvernight ? 'Overnight' :
+                          isFlexible ? 'Flexible' :
+                          isPartTime ? 'Part-Time' :
+                          isHourly ? 'Hourly' :
+                          isRotating ? 'Rotating' : 'Fixed'
+                        return (
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold border ${
+                            isOvernight ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                            isFlexible ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            isPartTime ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            isHourly ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            isRotating ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                            'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {label}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="p-3 font-mono font-bold text-slate-700">
                       <div>{formatTimeTo12Hour(s.startTime)} – {formatTimeTo12Hour(s.endTime)}</div>

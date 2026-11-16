@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/apiClient';
+import { syncPayroll } from '../../services/backendSync';
+import { loanService } from '../../services/loanService';
 
 export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, employees = [] }) {
   const { currentUser } = useAuth();
@@ -131,6 +133,12 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
         repaymentMonths: Number(formData.tenureMonths),
         remarks: formData.purpose.trim(),
       });
+
+      // Eagerly sync state with backend
+      await syncPayroll().catch(() => {});
+      if (typeof loanService.fetchLoans === 'function') {
+        await loanService.fetchLoans().catch(() => {});
+      }
 
       setSuccess('Loan / advance request submitted successfully.');
       setTimeout(() => {
