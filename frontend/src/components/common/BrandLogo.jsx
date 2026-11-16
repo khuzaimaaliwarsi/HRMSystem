@@ -34,6 +34,7 @@ export function BrandLogo({
       <button
         type="button"
         onClick={onClick}
+        style={{ outline: 'none', WebkitTapHighlightColor: 'transparent' }}
         className={baseClasses}
         title={title || ariaLabel}
         aria-label={ariaLabel}

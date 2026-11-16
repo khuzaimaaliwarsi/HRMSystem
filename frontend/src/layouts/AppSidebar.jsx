@@ -73,7 +73,7 @@ export function AppSidebar({
     <aside
       className={cn(
         "flex flex-col bg-[#0B132B] border-r border-slate-800/80 transition-all duration-300 z-30 select-none text-white",
-        isMobile ? "w-72 h-full" : collapsed ? "w-16" : "w-64",
+        isMobile ? "w-72 h-full" : collapsed ? "w-16" : "w-[280px]",
         !isMobile && "hidden lg:flex shrink-0 h-screen sticky top-0"
       )}
     >
@@ -92,8 +92,6 @@ export function AppSidebar({
               {/* Logo Mark: Circular Blue Brand Badge */}
               <BrandLogo
                 size="md"
-                onClick={onToggleCollapse}
-                title="Click logo to collapse sidebar"
                 ariaLabel="iSysware HRMS Logo"
               />
 
