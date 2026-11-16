@@ -164,7 +164,14 @@ export async function syncOrganization() {
   }
 }
 
-function normalizeShiftTypeFromBackend(type, isNightShift = false) {
+function normalizeShiftTypeFromBackend(type, isNightShift = false, name = '') {
+  const n = String(name || '').toLowerCase()
+  if (n.includes('flexible')) return 'Flexible'
+  if (n.includes('night') || n.includes('overnight') || isNightShift) return 'Overnight'
+  if (n.includes('part-time') || n.includes('part time')) return 'Part-Time'
+  if (n.includes('hourly')) return 'Hourly'
+  if (n.includes('rotating')) return 'Rotating'
+
   if (!type) return isNightShift ? 'Overnight' : 'Fixed'
   const t = String(type).trim().toUpperCase().replace('-', '_')
   if (t === 'FLEXIBLE') return 'Flexible'
@@ -196,7 +203,7 @@ export async function syncAttendanceAndShifts() {
         cuid: s.id,
         code: s.shiftCode || s.code,
         name: s.name,
-        type: normalizeShiftTypeFromBackend(s.type, s.isNightShift),
+        type: normalizeShiftTypeFromBackend(s.type, s.isNightShift, s.name),
         startTime: s.startTime || '09:00',
         endTime: s.endTime || '18:00',
         breakMinutes: Number(s.breakDurationMinutes ?? s.breakMinutes ?? 60),

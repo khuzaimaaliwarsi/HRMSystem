@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { employeeService } from '@/services/employeeService'
+import { shiftService } from '@/services/shiftService'
 import { syncOrganization } from '@/services/backendSync'
 import EmployeeDirectoryTable from '@/components/employee/EmployeeDirectoryTable'
 import EmployeeFormModal from '@/components/employee/EmployeeFormModal'
@@ -83,12 +84,36 @@ export function HrAdminEmployeePage() {
           formData.changeReason || 'HR Administrative Update',
           formData.effectiveDate
         )
+        if (formData.shift) {
+          const matchingShift = shiftService.getShifts().find((s) =>
+            formData.shift.includes(s.name) || formData.shift === s.name || s.id === formData.shiftId
+          )
+          if (matchingShift) {
+            await shiftService.assignShiftAsync({
+              employeeId: editingEmployee.id,
+              shiftId: matchingShift.id,
+              effectiveFrom: formData.effectiveDate || new Date().toISOString().slice(0, 10)
+            }, actor).catch(() => {})
+          }
+        }
         setNotification({
           type: 'success',
           message: `Staff record for ${formData.name} (${editingEmployee.id}) updated.`
         })
       } else {
         const created = await employeeService.createEmployeeAsync(formData, actor)
+        if (formData.shift && created?.id) {
+          const matchingShift = shiftService.getShifts().find((s) =>
+            formData.shift.includes(s.name) || formData.shift === s.name || s.id === formData.shiftId
+          )
+          if (matchingShift) {
+            await shiftService.assignShiftAsync({
+              employeeId: created.id,
+              shiftId: matchingShift.id,
+              effectiveFrom: formData.joiningDate || new Date().toISOString().slice(0, 10)
+            }, actor).catch(() => {})
+          }
+        }
         setNotification({
           type: 'success',
           message: `Employee ${created.name} (${created.id}) successfully added to directory.`

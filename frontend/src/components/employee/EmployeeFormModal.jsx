@@ -3,6 +3,7 @@ import AppIcon from '@/components/common/AppIcon'
 import Alert from '@/components/common/Alert'
 import { cn } from '@/lib/utils'
 import { employeeService } from '@/services/employeeService'
+import { shiftService } from '@/services/shiftService'
 import { syncOrganization } from '@/services/backendSync'
 
 const TODAY_STR = '2026-10-26'
@@ -269,8 +270,15 @@ export function EmployeeFormModal({
     )
     setFormData((prev) => {
       let nextDeptId = prev.departmentId
-      if (chosenSubDept && chosenSubDept.departmentId && !nextDeptId) {
-        nextDeptId = chosenSubDept.departmentId
+      if (chosenSubDept && chosenSubDept.departmentId) {
+        const matchingDept = safeDepartments.find(
+          (d) => d.id === chosenSubDept.departmentId || d.code === chosenSubDept.departmentId
+        )
+        if (matchingDept) {
+          nextDeptId = matchingDept.id
+        } else {
+          nextDeptId = chosenSubDept.departmentId
+        }
       }
       return {
         ...prev,
@@ -636,7 +644,7 @@ export function EmployeeFormModal({
                         const activeSubDepts = safeSubDepartments.filter(
                           (sd) => (sd.status || 'Active').toLowerCase() === 'active'
                         )
-                        const matchingSubDepts = formData.departmentId
+                        const deptMatchingSubDepts = formData.departmentId
                           ? activeSubDepts.filter((sd) => {
                               const matchesId = sd.departmentId === formData.departmentId
                               const matchesSelectedId = selectedDept && (sd.departmentId === selectedDept.id || sd.departmentId === selectedDept.code)
@@ -645,18 +653,50 @@ export function EmployeeFormModal({
                             })
                           : activeSubDepts
 
-                        return matchingSubDepts.map((sd) => {
-                          const pDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
-                          const deptLabel = pDept ? pDept.name : (sd.departmentName || '')
-                          const label = (!formData.departmentId && deptLabel)
-                            ? `${sd.name} (${sd.code}) — ${deptLabel}`
-                            : `${sd.name} (${sd.code})`
+                        const otherActiveSubDepts = activeSubDepts.filter(
+                          (sd) => !deptMatchingSubDepts.includes(sd)
+                        )
+
+                        if (deptMatchingSubDepts.length > 0) {
                           return (
-                            <option key={sd.id} value={sd.id}>
-                              {label}
-                            </option>
+                            <>
+                              <optgroup label={formData.departmentId ? "Department Specific Sub-Departments" : "Available Sub-Departments"}>
+                                {deptMatchingSubDepts.map((sd) => (
+                                  <option key={sd.id} value={sd.id}>
+                                    {sd.name} ({sd.code})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              {otherActiveSubDepts.length > 0 && (
+                                <optgroup label="Other Active Company Sub-Departments">
+                                  {otherActiveSubDepts.map((sd) => {
+                                    const pDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
+                                    const deptLabel = pDept ? pDept.name : (sd.departmentName || '')
+                                    return (
+                                      <option key={sd.id} value={sd.id}>
+                                        {sd.name} ({sd.code}) {deptLabel ? `— ${deptLabel}` : ''}
+                                      </option>
+                                    )
+                                  })}
+                                </optgroup>
+                              )}
+                            </>
                           )
-                        })
+                        }
+
+                        return (
+                          <optgroup label="All Active Company Sub-Departments">
+                            {activeSubDepts.map((sd) => {
+                              const pDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
+                              const deptLabel = pDept ? pDept.name : (sd.departmentName || '')
+                              return (
+                                <option key={sd.id} value={sd.id}>
+                                  {sd.name} ({sd.code}) {deptLabel ? `— ${deptLabel}` : ''}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        )
                       })()}
                     </select>
                   </div>
@@ -825,10 +865,26 @@ export function EmployeeFormModal({
                       onChange={handleChange}
                       className="w-full text-xs px-3 py-2 rounded-md border border-hrms-border bg-white text-hrms-text focus:outline-none focus:ring-1 focus:ring-hrms-accent"
                     >
-                      <option value="General Day (09:00 - 18:00)">General Day (09:00 - 18:00)</option>
-                      <option value="Dev Shift (09:00 - 18:00)">Dev Shift (09:00 - 18:00)</option>
-                      <option value="Sales General (09:30 - 18:30)">Sales General (09:30 - 18:30)</option>
-                      <option value="Creative Shift (10:00 - 19:00)">Creative Shift (10:00 - 19:00)</option>
+                      {(() => {
+                        const shiftList = shiftService.getShifts().filter(s => (s.status || 'Active').toLowerCase() === 'active')
+                        const renderedOptions = shiftList.map(s => {
+                          const val = `${s.name} (${s.startTime} - ${s.endTime})`
+                          return (
+                            <option key={s.id} value={val}>
+                              {s.name} ({s.startTime} – {s.endTime}) [{s.type || 'Fixed'}]
+                            </option>
+                          )
+                        })
+                        const hasCurrent = shiftList.some(s => `${s.name} (${s.startTime} - ${s.endTime})` === formData.shift || s.name === formData.shift)
+                        return (
+                          <>
+                            {renderedOptions}
+                            {formData.shift && !hasCurrent && (
+                              <option value={formData.shift}>{formData.shift}</option>
+                            )}
+                          </>
+                        )
+                      })()}
                     </select>
                   </div>
                 </div>

@@ -732,7 +732,7 @@ export function OrganizationStructureTab({
                       <td className="px-4 py-3">
                         <span className="font-semibold text-slate-800 block">{team.departmentName || team.departmentId}</span>
                         {team.subDepartmentName ? (
-                          <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-mono inline-block mt-0.5">
+                          <span className="text-[10px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded font-mono inline-block mt-0.5 border border-slate-200">
                             {team.subDepartmentName}
                           </span>
                         ) : (

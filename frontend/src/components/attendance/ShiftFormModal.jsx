@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
@@ -6,10 +6,21 @@ import Select from '@/components/common/Select'
 import Alert from '@/components/common/Alert'
 import { formatTimeTo12Hour } from '@/lib/dateUtils'
 
+function normalizeType(t) {
+  if (!t) return 'Fixed'
+  const upper = String(t).toUpperCase().replace('-', '_')
+  if (upper === 'FLEXIBLE') return 'Flexible'
+  if (upper === 'ROTATING') return 'Rotating'
+  if (upper === 'OVERNIGHT') return 'Overnight'
+  if (upper === 'PART_TIME') return 'Part-Time'
+  if (upper === 'HOURLY') return 'Hourly'
+  return 'Fixed'
+}
+
 function ShiftFormInner({ initialShift = null, onClose, onSubmit }) {
   const [name, setName] = useState(initialShift?.name || '')
   const [code, setCode] = useState(initialShift?.code || '')
-  const [type, setType] = useState(initialShift?.type || 'Fixed')
+  const [type, setType] = useState(() => normalizeType(initialShift?.type))
   const [startTime, setStartTime] = useState(initialShift?.startTime || '09:00')
   const [endTime, setEndTime] = useState(initialShift?.endTime || '18:00')
   const [breakMinutes, setBreakMinutes] = useState(initialShift?.breakMinutes ?? 60)
@@ -25,6 +36,44 @@ function ShiftFormInner({ initialShift = null, onClose, onSubmit }) {
   const [description, setDescription] = useState(initialShift?.description || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (initialShift) {
+      setName(initialShift.name || '')
+      setCode(initialShift.code || '')
+      setType(normalizeType(initialShift.type))
+      setStartTime(initialShift.startTime || '09:00')
+      setEndTime(initialShift.endTime || '18:00')
+      setBreakMinutes(initialShift.breakMinutes ?? 60)
+      setPaidBreak(Boolean(initialShift.paidBreak))
+      setExpectedWorkingHours(initialShift.expectedWorkingHours ?? 8.0)
+      setGracePeriodMinutes(initialShift.gracePeriodMinutes ?? 15)
+      setFlexStart(initialShift.flexibleArrivalWindow?.start || '08:00')
+      setFlexEnd(initialShift.flexibleArrivalWindow?.end || '11:00')
+      setCoreStart(initialShift.coreHoursStart || '11:00')
+      setCoreEnd(initialShift.coreHoursEnd || '16:00')
+      setOvertimeEligible(initialShift.overtimeEligible !== undefined ? initialShift.overtimeEligible : true)
+      setIsDefault(Boolean(initialShift.isDefault))
+      setDescription(initialShift.description || '')
+    } else {
+      setName('')
+      setCode('')
+      setType('Fixed')
+      setStartTime('09:00')
+      setEndTime('18:00')
+      setBreakMinutes(60)
+      setPaidBreak(false)
+      setExpectedWorkingHours(8.0)
+      setGracePeriodMinutes(15)
+      setFlexStart('08:00')
+      setFlexEnd('11:00')
+      setCoreStart('11:00')
+      setCoreEnd('16:00')
+      setOvertimeEligible(true)
+      setIsDefault(false)
+      setDescription('')
+    }
+  }, [initialShift])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

@@ -7,7 +7,7 @@
 import { prisma } from '../config/database.js'
 import { format12Hour, getKarachiDate } from '../utils/time.js'
 
-// Self-healing database enum check for new shift schedule types
+// Self-healing database enum check and retroactive auto-migration for shift types
 prisma.$executeRawUnsafe(`
   DO $$
   BEGIN
@@ -17,6 +17,10 @@ prisma.$executeRawUnsafe(`
   EXCEPTION
     WHEN duplicate_object THEN null;
   END $$;
+  UPDATE "shifts" SET "type" = 'FLEXIBLE' WHERE LOWER("name") LIKE '%flexible%' AND "type" = 'FIXED';
+  UPDATE "shifts" SET "type" = 'OVERNIGHT', "isNightShift" = true WHERE (LOWER("name") LIKE '%night%' OR LOWER("name") LIKE '%overnight%') AND "type" = 'FIXED';
+  UPDATE "shifts" SET "type" = 'PART_TIME' WHERE (LOWER("name") LIKE '%part%time%' OR LOWER("name") LIKE '%part-time%') AND "type" = 'FIXED';
+  UPDATE "shifts" SET "type" = 'HOURLY' WHERE LOWER("name") LIKE '%hourly%' AND "type" = 'FIXED';
 `).catch(() => {})
 
 export function normalizeShiftTypeToEnum(type) {
@@ -32,8 +36,17 @@ export function normalizeShiftTypeToEnum(type) {
 
 function enrichShift(shift) {
   if (!shift) return null
+  let derivedType = shift.type
+  if (derivedType === 'FIXED' && shift.name) {
+    const lname = shift.name.toLowerCase()
+    if (lname.includes('flexible')) derivedType = 'FLEXIBLE'
+    else if (lname.includes('night') || lname.includes('overnight') || shift.isNightShift) derivedType = 'OVERNIGHT'
+    else if (lname.includes('part-time') || lname.includes('part time')) derivedType = 'PART_TIME'
+    else if (lname.includes('hourly')) derivedType = 'HOURLY'
+  }
   return {
     ...shift,
+    type: derivedType,
     startTimeFormatted: format12Hour(shift.startTime),
     endTimeFormatted: format12Hour(shift.endTime),
     breakStartTimeFormatted: shift.breakStartTime ? format12Hour(shift.breakStartTime) : null,
