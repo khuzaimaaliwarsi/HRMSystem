@@ -100,8 +100,8 @@ export function SuperAdminEmployeePage() {
         })
       }
       setIsFormOpen(false)
-      await syncOrganization()
       loadData()
+      syncOrganization().then(() => loadData()).catch(() => {})
     } catch (err) {
       setNotification({ type: 'danger', message: err.message })
       throw err
@@ -167,74 +167,74 @@ export function SuperAdminEmployeePage() {
           teamAssignments={teamAssignments}
           onSaveDepartment={async (data, actor) => {
             const res = await employeeService.saveDepartmentAsync(data, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onToggleDepartmentStatus={async (id, actor) => {
             const res = await employeeService.toggleDepartmentStatusAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onDeleteDepartment={async (id, actor) => {
             const res = await employeeService.deleteDepartmentAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onSaveSubDepartment={async (data, actor) => {
             const res = await employeeService.saveSubDepartmentAsync(data, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onToggleSubDepartmentStatus={async (id, actor) => {
             const res = await employeeService.toggleSubDepartmentStatusAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onDeleteSubDepartment={async (id, actor) => {
             const res = await employeeService.deleteSubDepartmentAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onSaveTeam={async (data, actor) => {
             const res = await employeeService.saveTeamAsync(data, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onToggleTeamStatus={async (id, actor) => {
             const res = await employeeService.toggleTeamStatusAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onDeleteTeam={async (id, actor) => {
             const res = await employeeService.deleteTeamAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onSaveDesignation={async (data, actor) => {
             const res = await employeeService.saveDesignationAsync(data, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onToggleDesignationStatus={async (id, actor) => {
             const res = await employeeService.toggleDesignationStatusAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onDeleteDesignation={async (id, actor) => {
             const res = await employeeService.deleteDesignationAsync(id, actor)
-            await syncOrganization()
             loadData()
+            syncOrganization().then(() => loadData()).catch(() => {})
             return res
           }}
           onAssignTeamLeadOrManager={(data, actor) => {

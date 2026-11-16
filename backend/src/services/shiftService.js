@@ -307,8 +307,8 @@ export const shiftService = {
     }
 
     const [emp, shift] = await Promise.all([
-      prisma.employee.findUnique({ where: { id: employeeId } }),
-      prisma.shift.findUnique({ where: { id: shiftId } })
+      prisma.employee.findFirst({ where: { OR: [{ id: employeeId }, { employeeCode: employeeId }] } }),
+      prisma.shift.findFirst({ where: { OR: [{ id: shiftId }, { shiftCode: shiftId }, { name: shiftId }] } })
     ])
 
     if (!emp) {
@@ -324,13 +324,15 @@ export const shiftService = {
       throw error
     }
 
+    const resolvedEmployeeId = emp.id
+    const resolvedShiftId = shift.id
     const fromDate = new Date(effectiveFrom)
     const untilDate = effectiveUntil ? new Date(effectiveUntil) : null
 
     // Supersede any overlapping active assignment for THIS employee
     await prisma.shiftAssignment.updateMany({
       where: {
-        employeeId,
+        employeeId: resolvedEmployeeId,
         status: 'ACTIVE',
         effectiveFrom: { lte: untilDate || new Date('2099-12-31') },
         OR: [
@@ -345,8 +347,8 @@ export const shiftService = {
 
     const newAssignment = await prisma.shiftAssignment.create({
       data: {
-        employeeId,
-        shiftId,
+        employeeId: resolvedEmployeeId,
+        shiftId: resolvedShiftId,
         effectiveFrom: fromDate,
         effectiveUntil: untilDate,
         status: 'ACTIVE',
@@ -1104,10 +1106,16 @@ export const shiftService = {
   async resolveEmployeeShift(employeeId, businessDateStr = getKarachiDate()) {
     const targetDate = new Date(businessDateStr)
 
+    // Resolve employee cuid & employeeCode
+    const emp = await prisma.employee.findFirst({
+      where: { OR: [{ id: employeeId }, { employeeCode: employeeId }] }
+    })
+    const targetEmpIds = [employeeId, emp?.id, emp?.employeeCode].filter(Boolean)
+
     // 1. Look for explicit per-employee assignment active on businessDate
     const explicitAssignment = await prisma.shiftAssignment.findFirst({
       where: {
-        employeeId,
+        employeeId: { in: targetEmpIds },
         status: 'ACTIVE',
         effectiveFrom: { lte: targetDate },
         OR: [

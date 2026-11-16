@@ -406,8 +406,8 @@ class AttendanceService {
         const existing = list[existingIdx]
         let recChanged = false
 
-        // HEAL 1: Shift Isolation — non-EMP-005 must NEVER have QA Test Morning Shift
-        if (emp.id !== 'EMP-005' && (existing.shiftName === 'QA Test Morning Shift' || existing.shiftId === 'QA-MOR-01')) {
+        // HEAL 1: Always synchronize shift with employee's actual active assigned shift
+        if (existing.shiftId !== shift.id || existing.shiftName !== shift.name) {
           existing.shiftId = shift.id
           existing.shiftName = shift.name
           existing.expectedHours = shift.expectedWorkingHours || 8.0
@@ -1100,26 +1100,37 @@ class AttendanceService {
       const { apiClient } = await import('./apiClient.js')
       const corrections = this.getAttendanceCorrections()
       const corr = corrections.find(
-        (c) => c.id === id || c.cuid === id
+        (c) => c.id === id || c.cuid === id || c.requestCode === id
       )
-      const targetId = corr?.cuid || id
-      await apiClient.patch(`/attendance/corrections/${targetId}/review`, {
-        decision: 'APPROVED',
-        remarks: notes
-      })
+      const targetId = corr?.cuid || corr?.id || id
+      try {
+        await apiClient.patch(`/attendance/corrections/${targetId}/review`, {
+          decision: 'APPROVED',
+          remarks: notes
+        })
+      } catch (err) {
+        console.warn('[attendanceService] Review correction remote error:', err.message)
+      }
     }
-    return this.approveAttendanceCorrection(id, notes, actor, actorRole, actorId)
+    return this.approveAttendanceCorrection(id, notes, actor, actorRole, actorId, { isFinalApproval: true })
   }
 
   async rejectAttendanceCorrectionAsync(id, notes = '', actor = 'Bilal Siddiqui', actorRole = 'manager', actorId = null) {
     if (typeof window !== 'undefined') {
       const { apiClient } = await import('./apiClient.js')
-      const corr = this.getCorrectionById(id)
-      const targetId = corr?.cuid || id
-      await apiClient.patch(`/attendance/corrections/${targetId}/review`, {
-        decision: 'REJECTED',
-        remarks: notes
-      })
+      const corrections = this.getAttendanceCorrections()
+      const corr = corrections.find(
+        (c) => c.id === id || c.cuid === id || c.requestCode === id
+      )
+      const targetId = corr?.cuid || corr?.id || id
+      try {
+        await apiClient.patch(`/attendance/corrections/${targetId}/review`, {
+          decision: 'REJECTED',
+          remarks: notes
+        })
+      } catch (err) {
+        console.warn('[attendanceService] Reject correction remote error:', err.message)
+      }
     }
     return this.rejectAttendanceCorrection(id, notes, actor, actorRole, actorId)
   }

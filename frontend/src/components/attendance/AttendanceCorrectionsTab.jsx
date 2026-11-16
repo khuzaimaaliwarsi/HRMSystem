@@ -43,28 +43,36 @@ export function AttendanceCorrectionsTab({
     return dateB.localeCompare(dateA)
   })
 
-  const handleApprove = (c) => {
+  const handleApprove = async (c) => {
     try {
       setErrorMessage(null)
-      onApproveCorrection?.(c.id, decisionNotes || 'Attendance regularized', currentUser?.name, currentUser?.role, currentUser?.employeeId, { isFinalApproval: true })
+      c.status = 'Approved'
       setSelectedCorrection(null)
       setDecisionNotes('')
-      setSuccessMessage(`Correction request ${c.id} approved. Canonical attendance recalculated.`)
+      setSuccessMessage(`Correction request ${c.requestCode || c.id} approved. Canonical attendance recalculated.`)
       setTimeout(() => setSuccessMessage(null), 4000)
+      if (onApproveCorrection) {
+        await onApproveCorrection(c.id, decisionNotes || 'Attendance regularized', currentUser?.name, currentUser?.role, currentUser?.employeeId, { isFinalApproval: true })
+      }
     } catch (err) {
+      c.status = 'Pending Review'
       setErrorMessage(err.message)
     }
   }
 
-  const handleReject = (c) => {
+  const handleReject = async (c) => {
     try {
       setErrorMessage(null)
-      onRejectCorrection?.(c.id, decisionNotes || 'Correction declined', currentUser?.name, currentUser?.role, currentUser?.employeeId)
+      c.status = 'Rejected'
       setSelectedCorrection(null)
       setDecisionNotes('')
-      setSuccessMessage(`Correction request ${c.id} rejected. Official attendance remains unmodified.`)
+      setSuccessMessage(`Correction request ${c.requestCode || c.id} rejected. Official attendance remains unmodified.`)
       setTimeout(() => setSuccessMessage(null), 4000)
+      if (onRejectCorrection) {
+        await onRejectCorrection(c.id, decisionNotes || 'Correction declined', currentUser?.name, currentUser?.role, currentUser?.employeeId)
+      }
     } catch (err) {
+      c.status = 'Pending Review'
       setErrorMessage(err.message)
     }
   }

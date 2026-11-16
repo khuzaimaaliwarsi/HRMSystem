@@ -144,7 +144,8 @@ export const regularizationService = {
       throw error
     }
 
-    if (correction.status !== 'PENDING') {
+    // Allow idempotency if already reviewed to the same status
+    if (correction.status !== 'PENDING' && correction.status !== decision) {
       const error = new Error(`Cannot review request already marked as ${correction.status}.`)
       error.code = 'ALREADY_PROCESSED'
       error.status = 400
@@ -152,7 +153,7 @@ export const regularizationService = {
     }
 
     // CRITICAL SECURITY GUARD: Anti-Self-Approval (bypassed for SUPER_ADMIN authority)
-    const isSuperAdmin = reviewerUser?.role === 'SUPER_ADMIN'
+    const isSuperAdmin = String(reviewerUser?.role || '').toUpperCase() === 'SUPER_ADMIN'
     if (!isSuperAdmin && reviewerUser?.employee?.id && reviewerUser.employee.id === correction.employeeId) {
       const error = new Error('Anti-Self-Approval Violation: You cannot approve or reject your own attendance correction.')
       error.code = 'SELF_APPROVAL_PROHIBITED'
@@ -161,23 +162,42 @@ export const regularizationService = {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // If approved, update attendance record
+      let attRecord = correction.attendanceRecord
+
+      // If approved, update or create attendance record
       if (decision === 'APPROVED') {
-        let attRecord = correction.attendanceRecord
+        if (!attRecord) {
+          attRecord = await tx.attendanceRecord.findFirst({
+            where: {
+              employeeId: correction.employeeId,
+              attendanceDate: correction.attendanceDate
+            },
+            include: { shift: true }
+          })
+        }
 
         // If no attendance record exists, resolve shift and create one
         if (!attRecord) {
-          const shift = await tx.shift.findFirst({
-            where: { isDefault: true, isActive: true }
-          })
+          let shift = null
+          try {
+            const resolved = await shiftService.resolveEmployeeShift(correction.employeeId, getKarachiDate(correction.attendanceDate))
+            shift = resolved?.shift
+          } catch {}
+          if (!shift) {
+            shift = await tx.shift.findFirst({ where: { isActive: true } })
+          }
+          if (!shift) {
+            shift = await tx.shift.findFirst()
+          }
+
           attRecord = await tx.attendanceRecord.create({
             data: {
               employeeId: correction.employeeId,
               attendanceDate: correction.attendanceDate,
-              shiftId: shift.id,
-              shiftNameSnapshot: shift.name,
-              shiftStartTimeSnapshot: shift.startTime,
-              shiftEndTimeSnapshot: shift.endTime,
+              shiftId: shift?.id || 'SHF-DEFAULT',
+              shiftNameSnapshot: shift?.name || 'General Corporate Day Shift',
+              shiftStartTimeSnapshot: shift?.startTime || '09:00',
+              shiftEndTimeSnapshot: shift?.endTime || '18:00',
               status: 'PRESENT'
             },
             include: { shift: true }
@@ -188,18 +208,32 @@ export const regularizationService = {
         const newCheckOut = correction.requestedCheckOut || attRecord.lastCheckOut
 
         let calculatedMetrics = {
-          totalWorkMinutes: attRecord.totalWorkMinutes,
-          actualWorkMinutes: attRecord.actualWorkMinutes,
-          lateMinutes: attRecord.lateMinutes,
-          earlyExitMinutes: attRecord.earlyExitMinutes
+          totalWorkMinutes: attRecord.totalWorkMinutes || 0,
+          actualWorkMinutes: attRecord.actualWorkMinutes || 0,
+          lateMinutes: attRecord.lateMinutes || 0,
+          earlyExitMinutes: attRecord.earlyExitMinutes || 0
         }
 
-        if (newCheckIn && attRecord.shift) {
+        const activeShift = attRecord.shift || {
+          startTime: attRecord.shiftStartTimeSnapshot || '09:00',
+          endTime: attRecord.shiftEndTimeSnapshot || '18:00',
+          expectedWorkingHours: 8.0,
+          halfDayThresholdMinutes: 240,
+          gracePeriodMinutes: 15
+        }
+
+        if (newCheckIn) {
           calculatedMetrics = calculateAttendanceMetrics({
             checkInTime: getKarachiTime(newCheckIn),
             checkOutTime: newCheckOut ? getKarachiTime(newCheckOut) : null,
-            shift: attRecord.shift
+            shift: activeShift
           })
+        } else if (newCheckIn && newCheckOut) {
+          const [inH, inM] = getKarachiTime(newCheckIn).split(':').map(Number)
+          const [outH, outM] = getKarachiTime(newCheckOut).split(':').map(Number)
+          const diffMins = Math.max(0, (outH * 60 + outM) - (inH * 60 + inM) - 60)
+          calculatedMetrics.actualWorkMinutes = diffMins
+          calculatedMetrics.totalWorkMinutes = diffMins + 60
         }
 
         await tx.attendanceRecord.update({
@@ -212,17 +246,18 @@ export const regularizationService = {
             lateMinutes: calculatedMetrics.lateMinutes,
             earlyExitMinutes: calculatedMetrics.earlyExitMinutes,
             isRegularized: true,
-            status: calculatedMetrics.actualWorkMinutes >= (attRecord.shift?.halfDayThresholdMinutes || 240) ? 'PRESENT' : 'HALF_DAY',
-            remarks: `Regularized via ${correction.requestCode}: ${remarks || 'Approved by manager'}`
+            status: calculatedMetrics.actualWorkMinutes >= (activeShift?.halfDayThresholdMinutes || 240) ? 'PRESENT' : 'HALF_DAY',
+            remarks: `Regularized via ${correction.requestCode}: ${remarks || 'Approved by authority'}`
           }
         })
       }
 
-      // Update correction status
+      // Update correction status using guaranteed CUID primary key: correction.id
       const updatedCorrection = await tx.attendanceCorrectionRequest.update({
-        where: { id: correctionId },
+        where: { id: correction.id },
         data: {
           status: decision,
+          attendanceRecordId: attRecord ? attRecord.id : correction.attendanceRecordId,
           reviewedById: reviewerUser?.id || null,
           reviewedAt: new Date(),
           decisionRemarks: remarks?.trim() || null
@@ -230,6 +265,9 @@ export const regularizationService = {
       })
 
       return updatedCorrection
+    }, {
+      maxWait: 15000,
+      timeout: 30000
     })
 
     return result

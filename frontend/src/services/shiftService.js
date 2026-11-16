@@ -654,10 +654,17 @@ class ShiftService {
     const { employeeId, shiftId } = filters
 
     if (employeeId && employeeId !== 'all') {
-      list = list.filter((a) => a.employeeId === employeeId)
+      const emp = employeeService.getEmployeeById(employeeId)
+      const validSet = new Set([
+        employeeId,
+        emp?.id,
+        emp?.cuid,
+        emp?.employeeCode
+      ].filter(Boolean))
+      list = list.filter((a) => validSet.has(a.employeeId) || validSet.has(a.employeeCode) || validSet.has(a.employeeCuid))
     }
     if (shiftId && shiftId !== 'all') {
-      list = list.filter((a) => a.shiftId === shiftId)
+      list = list.filter((a) => a.shiftId === shiftId || a.shiftCuid === shiftId || a.shiftCode === shiftId)
     }
     return list
   }
@@ -794,14 +801,16 @@ class ShiftService {
     const matching = matchingList[0]
 
     if (matching) {
-      const resolved = this.getShiftById(matching.shiftId)
+      const allShifts = this.getShifts()
+      const resolved = this.getShiftById(matching.shiftId) ||
+        this.getShiftById(matching.shiftCuid) ||
+        allShifts.find((s) => s.id === matching.shiftId || s.code === matching.shiftId || s.name === matching.shiftName || s.name === matching.shiftTitle)
       const isQaMorning = resolved?.name === 'QA Test Morning Shift' || matching.shiftName === 'QA Test Morning Shift' || matching.shiftId === 'QA-MOR-01'
 
       // STRICT SHIFT ISOLATION: QA Test Morning Shift can ONLY resolve for EMP-005 (Ahmed Khan)
       if (isQaMorning && employeeId !== 'EMP-005') {
         const emp = employeeService.getEmployeeById(employeeId)
         if (emp?.shift) {
-          const allShifts = this.getShifts()
           const matched = allShifts.find(
             (s) => emp.shift.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(emp.shift.toLowerCase())
           )
@@ -815,10 +824,10 @@ class ShiftService {
       return {
         id: matching.shiftId,
         code: matching.shiftId,
-        name: matching.shiftName || matching.shiftId,
-        type: 'Fixed',
-        startTime: '09:00',
-        endTime: '18:00',
+        name: matching.shiftName || matching.shiftTitle || matching.shiftId,
+        type: matching.shiftType || 'Fixed',
+        startTime: matching.startTime || '09:00',
+        endTime: matching.endTime || '18:00',
         breakMinutes: 60,
         paidBreak: false,
         expectedWorkingHours: 8.0,

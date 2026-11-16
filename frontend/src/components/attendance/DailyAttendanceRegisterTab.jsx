@@ -224,9 +224,10 @@ export function DailyAttendanceRegisterTab({
                     <td className="p-3 text-slate-600 font-medium">{r.departmentName}</td>
                     <td className="p-3">
                       <div className="font-semibold text-slate-800 text-[11px]">
-                        {r.employeeId !== 'EMP-005' && (r.shiftName === 'QA Test Morning Shift' || r.shiftId === 'QA-MOR-01')
-                          ? (shiftService.resolveEmployeeShiftForDate(r.employeeId, r.date)?.name || 'General Corporate Day Shift')
-                          : r.shiftName}
+                        {(() => {
+                          const effectiveShift = shiftService.resolveEmployeeShiftForDate(r.employeeId, r.date)
+                          return effectiveShift?.name || r.shiftName || 'General Corporate Day Shift'
+                        })()}
                       </div>
                       <span className="inline-block text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
                         {r.workArrangement}

@@ -97,17 +97,23 @@ export async function syncOrganization() {
     }
 
     if (subDeptRes.status === 'fulfilled' && Array.isArray(subDeptRes.value)) {
-      const subDepts = subDeptRes.value.map((sd) => ({
-        id: sd.id,
-        code: sd.code,
-        name: sd.name,
-        departmentId: sd.departmentId,
-        description: sd.description || '',
-        status: sd.status || 'Active',
-        managerId: sd.managerId || null,
-        managerName: sd.manager ? `${sd.manager.firstName} ${sd.manager.lastName}` : (sd.managerName || 'Unassigned')
-      }))
+      const depts = employeeService.getDepartments()
+      const subDepts = subDeptRes.value.map((sd) => {
+        const parentDept = depts.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
+        return {
+          id: sd.id,
+          code: sd.code,
+          name: sd.name,
+          departmentId: sd.departmentId || sd.department?.id || '',
+          departmentName: sd.department?.name || parentDept?.name || '',
+          description: sd.description || '',
+          status: sd.status || 'Active',
+          managerId: sd.managerId || null,
+          managerName: sd.manager ? `${sd.manager.firstName} ${sd.manager.lastName}` : (sd.managerName || 'Unassigned')
+        }
+      })
       employeeService.memoryStorage['isysware_hrms_f02_sub_departments_v1'] = subDepts
+      employeeService._notify()
     }
 
     if (empRes.status === 'fulfilled' && Array.isArray(empRes.value)) {
@@ -248,13 +254,14 @@ export async function syncAttendanceAndShifts() {
         employeeId: c.employee?.employeeCode || c.employeeId,
         employeeName: c.employee ? `${c.employee.firstName || ''} ${c.employee.lastName || ''}`.trim() : 'Employee',
         attendanceDate: c.attendanceDate ? new Date(c.attendanceDate).toISOString().slice(0, 10) : '',
-        correctionType: c.correctionType || 'Missing Check-Out',
+        correctionType: c.adjustmentType || c.correctionType || 'Missing Check-Out',
         requestedCheckIn: c.requestedCheckIn ? new Date(c.requestedCheckIn).toISOString().slice(11, 16) : '09:00',
         requestedCheckOut: c.requestedCheckOut ? new Date(c.requestedCheckOut).toISOString().slice(11, 16) : '18:00',
         reason: c.reason || '',
-        status: statusMap[c.status] || c.status || 'Pending Review',
+        status: statusMap[c.status] || (c.status === 'APPROVED' ? 'Approved' : (c.status === 'REJECTED' ? 'Rejected' : 'Pending Review')),
         submittedAt: c.createdAt ? new Date(c.createdAt).toISOString().replace('T', ' ').slice(0, 19) : ''
       }))
+      attendanceService._notify()
     }
 
     if (wfhRes.status === 'fulfilled' && Array.isArray(wfhRes.value)) {

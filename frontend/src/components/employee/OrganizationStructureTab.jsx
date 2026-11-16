@@ -218,18 +218,20 @@ export function OrganizationStructureTab({
     }
   }
 
-  // Handlers for saves
+  // Handlers for saves (Instant optimistic UI updates)
   const handleSaveDept = async (e) => {
     e.preventDefault()
     try {
-      const headEmp = employees.find((emp) => emp.id === deptForm.headId)
-      await onSaveDepartment({
+      const isEdit = Boolean(editingItem)
+      const headEmp = safeEmployees.find((emp) => emp.id === deptForm.headId)
+      const payload = {
         id: editingItem ? editingItem.id : undefined,
         ...deptForm,
         headName: headEmp ? headEmp.name : 'Unassigned'
-      }, actor)
-      setNotification({ type: 'success', message: `Department ${editingItem ? 'updated' : 'created'} successfully.` })
+      }
       closeModal()
+      setNotification({ type: 'success', message: `Department ${isEdit ? 'updated' : 'created'} successfully.` })
+      await onSaveDepartment(payload, actor)
     } catch (err) {
       setNotification({ type: 'danger', message: err.message })
     }
@@ -238,14 +240,18 @@ export function OrganizationStructureTab({
   const handleSaveSubDept = async (e) => {
     e.preventDefault()
     try {
-      const mgrEmp = employees.find((emp) => emp.id === subdeptForm.managerId)
-      await onSaveSubDepartment({
+      const isEdit = Boolean(editingItem)
+      const mgrEmp = safeEmployees.find((emp) => emp.id === subdeptForm.managerId)
+      const parentDept = safeDepartments.find((d) => d.id === subdeptForm.departmentId || d.code === subdeptForm.departmentId)
+      const payload = {
         id: editingItem ? editingItem.id : undefined,
         ...subdeptForm,
+        departmentName: parentDept ? parentDept.name : '',
         managerName: mgrEmp ? mgrEmp.name : 'Unassigned'
-      }, actor)
-      setNotification({ type: 'success', message: `Sub-department ${editingItem ? 'updated' : 'created'} successfully.` })
+      }
       closeModal()
+      setNotification({ type: 'success', message: `Sub-department ${isEdit ? 'updated' : 'created'} successfully.` })
+      await onSaveSubDepartment(payload, actor)
     } catch (err) {
       setNotification({ type: 'danger', message: err.message })
     }
@@ -254,18 +260,22 @@ export function OrganizationStructureTab({
   const handleSaveTeam = async (e) => {
     e.preventDefault()
     try {
-      const mgrEmp = employees.find((emp) => emp.id === teamForm.managerId)
-      const leadEmp = employees.find((emp) => emp.id === teamForm.teamLeadId)
-      await onSaveTeam({
+      const isEdit = Boolean(editingItem)
+      const mgrEmp = safeEmployees.find((emp) => emp.id === teamForm.managerId)
+      const leadEmp = safeEmployees.find((emp) => emp.id === teamForm.teamLeadId)
+      const parentDept = safeDepartments.find((d) => d.id === teamForm.departmentId || d.code === teamForm.departmentId)
+      const payload = {
         id: editingItem ? editingItem.id : undefined,
         ...teamForm,
+        departmentName: parentDept ? parentDept.name : '',
         subDepartmentId: teamForm.subDepartmentId || null,
         managerName: mgrEmp ? mgrEmp.name : 'Unassigned',
         teamLeadId: teamForm.teamLeadId || null,
         teamLeadName: leadEmp ? leadEmp.name : 'Unassigned'
-      }, actor)
-      setNotification({ type: 'success', message: `Team ${editingItem ? 'updated' : 'created'} successfully.` })
+      }
       closeModal()
+      setNotification({ type: 'success', message: `Team ${isEdit ? 'updated' : 'created'} successfully.` })
+      await onSaveTeam(payload, actor)
     } catch (err) {
       setNotification({ type: 'danger', message: err.message })
     }
@@ -274,12 +284,14 @@ export function OrganizationStructureTab({
   const handleSaveDesig = async (e) => {
     e.preventDefault()
     try {
-      await onSaveDesignation({
+      const isEdit = Boolean(editingItem)
+      const payload = {
         id: editingItem ? editingItem.id : undefined,
         ...desigForm
-      }, actor)
-      setNotification({ type: 'success', message: `Designation ${editingItem ? 'updated' : 'created'} successfully.` })
+      }
       closeModal()
+      setNotification({ type: 'success', message: `Designation ${isEdit ? 'updated' : 'created'} successfully.` })
+      await onSaveDesignation(payload, actor)
     } catch (err) {
       setNotification({ type: 'danger', message: err.message })
     }
@@ -611,9 +623,15 @@ export function OrganizationStructureTab({
                           <span className="text-[11px] text-hrms-muted truncate max-w-sm block">{sd.description}</span>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-semibold text-[11px]">
-                            {sd.departmentName || sd.departmentId}
-                          </span>
+                          {(() => {
+                            const parentDept = safeDepartments.find((d) => d.id === sd.departmentId || d.code === sd.departmentId)
+                            const displayDept = parentDept ? `${parentDept.name} (${parentDept.code})` : (sd.departmentName || sd.departmentId || 'Unassigned')
+                            return (
+                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-semibold text-[11px]">
+                                {displayDept}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
                           {sd.managerName || 'Unassigned'}
@@ -1159,7 +1177,8 @@ export function OrganizationStructureTab({
                   className="w-full text-xs px-2.5 py-1.5 rounded border border-hrms-border"
                   required
                 >
-                  {departments.map((d) => (
+                  <option value="">Select Parent Department</option>
+                  {safeDepartments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name} ({d.code})
                     </option>
@@ -1654,7 +1673,11 @@ export function OrganizationStructureTab({
                 <div className="space-y-2">
                   <div>
                     <span className="text-[11px] text-slate-500 font-semibold block">Parent Department:</span>
-                    <span className="font-bold text-slate-800 text-xs">{viewingItem.item.departmentName || viewingItem.item.departmentId}</span>
+                    {(() => {
+                      const parentDept = safeDepartments.find((d) => d.id === viewingItem.item.departmentId || d.code === viewingItem.item.departmentId)
+                      const displayDept = parentDept ? `${parentDept.name} (${parentDept.code})` : (viewingItem.item.departmentName || viewingItem.item.departmentId || 'Unassigned')
+                      return <span className="font-bold text-slate-800 text-xs">{displayDept}</span>
+                    })()}
                   </div>
                   <div>
                     <span className="text-[11px] text-slate-500 font-semibold block">Sub-Department Manager:</span>
