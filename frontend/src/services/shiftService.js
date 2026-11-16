@@ -234,24 +234,25 @@ class ShiftService {
     const { apiClient } = await import('./apiClient.js')
 
     const res = await apiClient.post('/shifts', {
-      shiftCode: data.shiftCode || data.code,
-      name: data.name,
-      type: data.type === 'Flexible' ? 'FLEXIBLE'
-        : data.type === 'Rotating' ? 'ROTATING' : 'FIXED',
+      shiftCode: (data.shiftCode || data.code || '').trim().toUpperCase(),
+      name: (data.name || '').trim(),
+      type: data.type || 'Fixed',
       startTime: data.startTime,
       endTime: data.endTime,
       graceMinutesIn: Number(data.gracePeriodMinutes ?? 15),
       graceMinutesOut: Number(data.gracePeriodMinutes ?? 15),
       breakDurationMinutes: Number(data.breakMinutes ?? 60),
-      fullDayTargetMinutes: Number(data.expectedWorkHours ?? 8) * 60,
-      isBreakPaid: Boolean(data.isBreakPaid),
+      fullDayTargetMinutes: Number(data.expectedWorkingHours ?? data.expectedWorkHours ?? 8) * 60,
+      isBreakPaid: Boolean(data.paidBreak || data.isBreakPaid),
+      isNightShift: data.type === 'Overnight' || Boolean(data.isNightShift),
+      isDefault: Boolean(data.isDefault),
       workDaysJson: data.weeklyWorkingDays || [
         'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'
       ]
     })
 
     const saved = res?.data || res
-    data.cuid = saved?.id
+    data.cuid = saved?.id || data.cuid
 
     return this.createShift(data, actor)
   }
@@ -259,12 +260,14 @@ class ShiftService {
   async updateShiftAsync(id, updates, actor = 'Super Administrator') {
     if (typeof window !== 'undefined') {
       const { apiClient } = await import('./apiClient.js')
-      const targetId = this.getShiftById(id)?.cuid || id
+      const target = this.getShiftById(id)
+      const targetId = target?.cuid || target?.id || updates.cuid || id
       await apiClient.patch(`/shifts/${targetId}`, {
-        name: updates.name,
-        code: updates.code,
-        shiftCode: updates.code,
-        type: updates.type ? updates.type.toUpperCase() : undefined,
+        name: updates.name ? updates.name.trim() : undefined,
+        code: updates.code ? updates.code.trim().toUpperCase() : undefined,
+        shiftCode: updates.code ? updates.code.trim().toUpperCase() : undefined,
+        type: updates.type,
+        isNightShift: updates.type === 'Overnight' ? true : undefined,
         startTime: updates.startTime,
         endTime: updates.endTime,
         breakDurationMinutes: updates.breakMinutes !== undefined
@@ -520,10 +523,12 @@ class ShiftService {
     }
 
     const nextNum = list.length + 1
-    const id = `SHIFT-${String(nextNum).padStart(2, '0')}`
+    const generatedId = `SHIFT-${String(nextNum).padStart(2, '0')}`
+    const id = data.cuid || generatedId
 
     const newShift = {
       id,
+      cuid: data.cuid || generatedId,
       code,
       name,
       type,

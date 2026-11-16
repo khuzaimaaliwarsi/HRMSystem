@@ -164,6 +164,17 @@ export async function syncOrganization() {
   }
 }
 
+function normalizeShiftTypeFromBackend(type, isNightShift = false) {
+  if (!type) return isNightShift ? 'Overnight' : 'Fixed'
+  const t = String(type).trim().toUpperCase().replace('-', '_')
+  if (t === 'FLEXIBLE') return 'Flexible'
+  if (t === 'ROTATING') return 'Rotating'
+  if (t === 'OVERNIGHT' || isNightShift) return 'Overnight'
+  if (t === 'PART_TIME') return 'Part-Time'
+  if (t === 'HOURLY') return 'Hourly'
+  return 'Fixed'
+}
+
 /**
  * 2. Synchronize Shifts & Attendance Register
  */
@@ -185,7 +196,7 @@ export async function syncAttendanceAndShifts() {
         cuid: s.id,
         code: s.shiftCode || s.code,
         name: s.name,
-        type: s.type ? (s.type.charAt(0).toUpperCase() + s.type.slice(1).toLowerCase()) : 'Fixed',
+        type: normalizeShiftTypeFromBackend(s.type, s.isNightShift),
         startTime: s.startTime || '09:00',
         endTime: s.endTime || '18:00',
         breakMinutes: Number(s.breakDurationMinutes ?? s.breakMinutes ?? 60),

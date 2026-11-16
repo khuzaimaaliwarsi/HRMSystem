@@ -75,6 +75,9 @@ enum ShiftType {
   FIXED
   FLEXIBLE
   ROTATING
+  OVERNIGHT
+  PART_TIME
+  HOURLY
 }
 
 enum ShiftAssignmentStatus {

@@ -7,6 +7,29 @@
 import { prisma } from '../config/database.js'
 import { format12Hour, getKarachiDate } from '../utils/time.js'
 
+// Self-healing database enum check for new shift schedule types
+prisma.$executeRawUnsafe(`
+  DO $$
+  BEGIN
+    ALTER TYPE "ShiftType" ADD VALUE IF NOT EXISTS 'OVERNIGHT';
+    ALTER TYPE "ShiftType" ADD VALUE IF NOT EXISTS 'PART_TIME';
+    ALTER TYPE "ShiftType" ADD VALUE IF NOT EXISTS 'HOURLY';
+  EXCEPTION
+    WHEN duplicate_object THEN null;
+  END $$;
+`).catch(() => {})
+
+export function normalizeShiftTypeToEnum(type) {
+  if (!type) return 'FIXED'
+  const t = String(type).trim().toUpperCase().replace('-', '_')
+  if (t === 'FLEXIBLE') return 'FLEXIBLE'
+  if (t === 'ROTATING') return 'ROTATING'
+  if (t === 'OVERNIGHT') return 'OVERNIGHT'
+  if (t === 'PART_TIME' || t === 'PART_TIME_SHIFT') return 'PART_TIME'
+  if (t === 'HOURLY') return 'HOURLY'
+  return 'FIXED'
+}
+
 function enrichShift(shift) {
   if (!shift) return null
   return {
@@ -179,11 +202,14 @@ export const shiftService = {
       })
     }
 
+    const targetType = normalizeShiftTypeToEnum(type || data.scheduleType)
+    const isNight = Boolean(isNightShift || targetType === 'OVERNIGHT' || (startTime && endTime && startTime > endTime))
+
     const created = await prisma.shift.create({
       data: {
         shiftCode: shiftCode.trim().toUpperCase(),
         name: name.trim(),
-        type,
+        type: targetType,
         startTime: startTime.trim(),
         endTime: endTime.trim(),
         graceMinutesIn: parseInt(graceMinutesIn, 10),
@@ -196,7 +222,7 @@ export const shiftService = {
         isBreakPaid: Boolean(isBreakPaid),
         isDefault: Boolean(isDefault),
         workDaysJson: workDaysJson || ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
-        isNightShift: Boolean(isNightShift),
+        isNightShift: isNight,
         isActive: Boolean(isActive)
       }
     })
@@ -209,7 +235,14 @@ export const shiftService = {
    */
   async updateShift(id, data) {
     const shift = await prisma.shift.findFirst({
-      where: { OR: [{ id }, { shiftCode: id }] }
+      where: {
+        OR: [
+          { id },
+          { shiftCode: id },
+          { shiftCode: data.shiftCode },
+          { shiftCode: data.code }
+        ].filter(Boolean)
+      }
     })
     if (!shift) {
       const error = new Error(`Shift '${id}' not found`)
@@ -226,12 +259,19 @@ export const shiftService = {
         })
       }
 
+      const updateCode = (data.shiftCode || data.code) ? (data.shiftCode || data.code).trim().toUpperCase() : undefined
+      const updateType = data.type ? normalizeShiftTypeToEnum(data.type) : undefined
+      const isNight = data.type
+        ? (updateType === 'OVERNIGHT' || Boolean(data.isNightShift))
+        : (data.isNightShift !== undefined ? Boolean(data.isNightShift) : undefined)
+
       const updated = await tx.shift.update({
         where: { id: shift.id },
         data: {
-          shiftCode: (data.shiftCode || data.code) ? (data.shiftCode || data.code).trim().toUpperCase() : undefined,
+          shiftCode: updateCode,
           name: data.name ? data.name.trim() : undefined,
-          type: data.type ? data.type.toUpperCase() : undefined,
+          type: updateType,
+          isNightShift: isNight,
           startTime: data.startTime || undefined,
           endTime: data.endTime || undefined,
           breakDurationMinutes: data.breakDurationMinutes !== undefined ? Number(data.breakDurationMinutes) : (data.breakMinutes !== undefined ? Number(data.breakMinutes) : undefined),
@@ -251,7 +291,12 @@ export const shiftService = {
    */
   async deleteShift(id) {
     const shift = await prisma.shift.findFirst({
-      where: { OR: [{ id }, { shiftCode: id }] },
+      where: {
+        OR: [
+          { id },
+          { shiftCode: id }
+        ].filter(Boolean)
+      },
       include: {
         _count: { select: { assignments: true, attendanceRecords: true } }
       }
@@ -273,14 +318,7 @@ export const shiftService = {
 
     if (shift._count.assignments > 0) {
       const error = new Error(`Cannot delete shift '${shift.name}': ${shift._count.assignments} employee assignment(s) are associated with this shift. Reassign or remove employee shift assignments first.`)
-      error.code = 'ACTIVE_ASSIGNMENTS_EXIST'
-      error.status = 400
-      throw error
-    }
-
-    if (shift._count.attendanceRecords > 0) {
-      const error = new Error(`Cannot delete shift '${shift.name}': ${shift._count.attendanceRecords} historical attendance record(s) reference this shift. Deactivate the shift instead.`)
-      error.code = 'HISTORICAL_ATTENDANCE_EXISTS'
+      error.code = 'SHIFT_ASSIGNMENTS_EXIST'
       error.status = 400
       throw error
     }
