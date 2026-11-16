@@ -23,9 +23,9 @@ export function BrandLogo({
   }
 
   const baseClasses = cn(
-    'rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-sky-400 text-white font-black tracking-tight select-none flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30 border border-blue-400/40',
+    'rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-sky-400 text-white font-black tracking-tight select-none flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30 border border-blue-400/40 outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 select-none',
     sizeClasses[size] || sizeClasses.md,
-    onClick && 'cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400/50',
+    onClick && 'cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none active:outline-none',
     className
   )
 

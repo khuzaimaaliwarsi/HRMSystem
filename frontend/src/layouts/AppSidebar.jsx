@@ -80,10 +80,10 @@ export function AppSidebar({
       {/* Brand Header */}
       <div
         className={cn(
-          "border-b border-slate-800/80 flex items-center bg-[#0B132B] shrink-0 transition-all",
+          "h-16 border-b border-slate-800/80 flex items-center bg-[#0B132B] shrink-0 transition-all",
           collapsed && !isMobile
-            ? "h-20 flex-col justify-center items-center gap-1.5 px-1 py-2"
-            : "h-16 px-3.5 justify-between"
+            ? "justify-center px-1"
+            : "px-3.5 justify-between"
         )}
       >
         {!collapsed || isMobile ? (
@@ -112,7 +112,7 @@ export function AppSidebar({
               <button
                 type="button"
                 onClick={onToggleCollapse}
-                className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0"
                 title="Collapse sidebar"
                 aria-label="Collapse sidebar"
               >
@@ -121,27 +121,13 @@ export function AppSidebar({
             )}
           </>
         ) : (
-          /* Collapsed State Header: Circular Blue Logo AND Expand Arrow (Both click-to-expand) */
-          <>
-            {/* 1. Circular Brand Logo Button */}
-            <BrandLogo
-              size="md"
-              onClick={onToggleCollapse}
-              title="Click logo to expand sidebar"
-              ariaLabel="Expand sidebar with logo"
-            />
-
-            {/* 2. Expand Arrow Button */}
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="w-6 h-6 rounded-full bg-slate-800/90 hover:bg-blue-600/40 border border-slate-700/60 flex items-center justify-center text-blue-400 hover:text-white transition-all cursor-pointer group shadow-2xs"
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
-            >
-              <AppIcon name="chevronRight" className="w-3.5 h-3.5 text-blue-400 group-hover:text-white transition-colors" />
-            </button>
-          </>
+          /* Collapsed State Header: ONLY Circular Blue Brand Logo (click to expand) */
+          <BrandLogo
+            size="md"
+            onClick={onToggleCollapse}
+            title="Click logo to expand sidebar"
+            ariaLabel="Expand sidebar with logo"
+          />
         )}
 
         {/* Mobile Close Button */}
