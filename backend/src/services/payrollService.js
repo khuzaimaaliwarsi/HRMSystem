@@ -44,24 +44,35 @@ function daysInclusive(from, until) {
 }
 
 function salaryForPayrollPeriod(emp, start, end) {
-  const structures = (emp.salaryStructures || []).filter(s => {
+  const allStructures = Array.isArray(emp?.salaryStructures) ? emp.salaryStructures : []
+  const currentStruct = allStructures.find(s => s.isCurrent)
+  const currentDate = currentStruct ? toUtcCalendarDate(currentStruct.effectiveFrom) : null
+
+  const structures = allStructures.filter(s => {
     const from = toUtcCalendarDate(s.effectiveFrom)
     const until = toUtcCalendarDate(s.effectiveUntil)
+    if (!s.isCurrent && until && from && until <= from) return false
+    if (!s.isCurrent && currentStruct && from === currentDate) return false
     return (!from || from <= end) && (!until || until >= start)
   }).sort((a, b) => (toUtcCalendarDate(a.effectiveFrom) || '').localeCompare(toUtcCalendarDate(b.effectiveFrom) || ''))
   if (!structures.length) return null
 
-  // Historical snapshots are retained. Never infer an earlier basic from a future structure.
-  const first = structures[0]
-  let baseline = structures.filter(s => toUtcCalendarDate(s.effectiveFrom) <= start).at(-1) || first
+  // Historical snapshots are retained.
+  // Baseline structure: latest structure starting on or before period start, or current structure, or latest structure
+  const pastStructures = structures.filter(s => toUtcCalendarDate(s.effectiveFrom) <= start)
+  const baseline = pastStructures.length ? pastStructures.at(-1) : (structures.find(s => s.isCurrent) || structures.at(-1) || structures[0])
   let basic = Number(baseline.baseSalary)
   let startingBasic = basic
   let houseRent = Number(baseline.houseRentAllowance || 0)
   let medical = Number(baseline.medicalAllowance || 0)
   let conveyance = Number(baseline.conveyanceAllowance || 0)
   let special = Number(baseline.specialAllowance || 0)
-  let events = structures.filter(s => toUtcCalendarDate(s.effectiveFrom) > start && toUtcCalendarDate(s.effectiveFrom) <= end)
-    .map(s => ({ date: toUtcCalendarDate(s.effectiveFrom), basic: Number(s.baseSalary), source: 'structure' }))
+
+  const baselineFrom = toUtcCalendarDate(baseline.effectiveFrom)
+  let events = structures.filter(s => {
+    const date = toUtcCalendarDate(s.effectiveFrom)
+    return date > start && date <= end && (!baselineFrom || date > baselineFrom)
+  }).map(s => ({ date: toUtcCalendarDate(s.effectiveFrom), basic: Number(s.baseSalary), source: 'structure' }))
 
   for (const revision of emp.salaryRevisions || []) {
     if (revision.status !== 'APPROVED') continue
@@ -209,6 +220,16 @@ function resolveEffectiveSalaryStructure(emp, periodStartStr, periodEndStr) {
   const structures = Array.isArray(emp?.salaryStructures) ? emp.salaryStructures : []
   if (structures.length === 0) return null
 
+  // Prioritize active current structure if valid for the period
+  const current = structures.find(s => s.isCurrent)
+  if (current) {
+    const fromStr = toUtcCalendarDate(current.effectiveFrom)
+    const untilStr = toUtcCalendarDate(current.effectiveUntil)
+    if ((!fromStr || !periodEndStr || fromStr <= periodEndStr) && (!untilStr || !periodStartStr || untilStr > periodStartStr)) {
+      return current
+    }
+  }
+
   const sorted = [...structures].sort((a, b) => {
     const aTime = new Date(a.effectiveFrom || 0).getTime()
     const bTime = new Date(b.effectiveFrom || 0).getTime()
@@ -220,6 +241,7 @@ function resolveEffectiveSalaryStructure(emp, periodStartStr, periodEndStr) {
     const fromStr = toUtcCalendarDate(s.effectiveFrom)
     if (fromStr && periodEndStr && fromStr > periodEndStr) return false
     const untilStr = toUtcCalendarDate(s.effectiveUntil)
+    if (untilStr && fromStr && !s.isCurrent && untilStr <= fromStr) return false
     if (untilStr && periodStartStr && untilStr <= periodStartStr) return false
     return true
   }) || null
@@ -1391,6 +1413,124 @@ export const payrollService = {
   },
 
   /**
+   * Reconciles a DRAFT payroll run in-place against canonical salary structures and
+   * leaves/attendance without changing the run number.
+   */
+  async reconcileDraftRunInPlace(runId, actorUser = null) {
+    const run = await prisma.payrollRun.findUnique({
+      where: { id: runId },
+      include: {
+        payrollPeriod: true,
+        entries: {
+          include: {
+            employee: {
+              include: {
+                salaryStructures: true,
+                salaryRevisions: { where: { status: 'APPROVED' } },
+                allowanceAllocations: { where: { isActive: true }, include: { allowance: true } }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!run || run.status !== 'DRAFT') return null
+
+    const start = toUtcCalendarDate(run.payrollPeriod?.startDate)
+    const end = toUtcCalendarDate(run.payrollPeriod?.endDate)
+    const taxConfig = await payrollTaxService.getTaxConfig()
+
+    let totalGross = 0
+    let totalDeductions = 0
+    let totalNet = 0
+
+    await prisma.$transaction(async (tx) => {
+      for (const entry of run.entries) {
+        const resolved = salaryForPayrollPeriod(entry.employee, start, end)
+        const baseSalary = resolved ? resolved.baseSalary : Number(entry.basicSalary)
+        const houseRent = resolved ? resolved.houseRentAllowance : Number(entry.houseRentAllowance || 0)
+        const medical = resolved ? resolved.medicalAllowance : Number(entry.medicalAllowance || 0)
+        const conveyance = resolved ? resolved.conveyanceAllowance : Number(entry.conveyanceAllowance || 0)
+        const special = resolved ? resolved.specialAllowance : Number(entry.specialAllowance || 0)
+        const otAmount = Number(entry.overtimeAmount || 0)
+        const bonus = Number(entry.bonusAmount || 0)
+        const commission = Number(entry.commissionAmount || 0)
+
+        const grossEarnings = baseSalary + houseRent + medical + conveyance + special + otAmount + bonus + commission
+
+        const taxCalc = await payrollTaxService.calculateEmployeeTax(
+          entry.employee,
+          grossEarnings,
+          run.payrollPeriod?.startDate || new Date(),
+          taxConfig
+        )
+        const taxDeduction = taxCalc.taxDeduction
+
+        const unpaidAbsence = Number(entry.unpaidAbsenceDeduction || 0)
+        const loanDeduction = Number(entry.loanDeduction || 0)
+        const otherDeductions = Number(entry.otherDeductions || 0)
+        const eobiDeduction = Number(entry.eobiDeduction || 0)
+        const providentFundDeduction = Number(entry.providentFundDeduction || 0)
+
+        const totalEmpDeductions = taxDeduction + unpaidAbsence + loanDeduction + otherDeductions + eobiDeduction + providentFundDeduction
+        const netSalary = Math.max(0, grossEarnings - totalEmpDeductions)
+        const unrecoveredLiability = totalEmpDeductions > grossEarnings ? totalEmpDeductions - grossEarnings : 0
+
+        totalGross += grossEarnings
+        totalDeductions += totalEmpDeductions
+        totalNet += netSalary
+
+        await tx.payrollEntry.update({
+          where: { id: entry.id },
+          data: {
+            basicSalary: new Prisma.Decimal(baseSalary.toFixed(2)),
+            houseRentAllowance: new Prisma.Decimal(houseRent.toFixed(2)),
+            medicalAllowance: new Prisma.Decimal(medical.toFixed(2)),
+            conveyanceAllowance: new Prisma.Decimal(conveyance.toFixed(2)),
+            specialAllowance: new Prisma.Decimal(special.toFixed(2)),
+            grossEarnings: new Prisma.Decimal(grossEarnings.toFixed(2)),
+            taxDeduction: new Prisma.Decimal(taxDeduction.toFixed(2)),
+            totalDeductions: new Prisma.Decimal(totalEmpDeductions.toFixed(2)),
+            netSalary: new Prisma.Decimal(netSalary.toFixed(2)),
+            unrecoveredLiability: new Prisma.Decimal(unrecoveredLiability.toFixed(2))
+          }
+        })
+      }
+
+      await tx.payrollRun.update({
+        where: { id: run.id },
+        data: {
+          totalGross: new Prisma.Decimal(totalGross.toFixed(2)),
+          totalDeductions: new Prisma.Decimal(totalDeductions.toFixed(2)),
+          totalNet: new Prisma.Decimal(totalNet.toFixed(2))
+        }
+      })
+    })
+
+    if (actorUser) {
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: actorUser.id,
+          actorRole: actorUser.role || 'SUPER_ADMIN',
+          sourceModule: 'PAYROLL',
+          actionType: 'RECONCILE',
+          entityName: 'PayrollRun',
+          entityId: run.id,
+          recordSnapshotAfter: {
+            runNumber: run.runNumber,
+            totalGross,
+            totalNet,
+            reconciledInPlace: true
+          }
+        }
+      }).catch(() => {})
+    }
+
+    return this.getPayrollRunById(run.id, actorUser)
+  },
+
+  /**
    * Reconciles a stale/invalid DRAFT or PENDING_APPROVAL payroll run by voiding it
    * with full audit history (preserving historical rows & entries) and regenerating
    * a canonical run against active eligible employees and effective-dated salary structures.
@@ -1438,6 +1578,10 @@ export const payrollService = {
       error.code = 'PERIOD_NOT_FOUND'
       error.status = 404
       throw error
+    }
+
+    if (existing.status === 'DRAFT' && reason !== 'FORCE_VOID_REGENERATE') {
+      return await this.reconcileDraftRunInPlace(runId, actorUser)
     }
 
     const cleanReason = String(reason || '').trim() || 'Payroll draft reconciliation'
@@ -1776,7 +1920,28 @@ export const payrollService = {
       }
     })
 
-    return payslips
+    const slipsWithAttendance = await Promise.all(
+      payslips.map(async (ps) => {
+        const periodStart = ps.payrollRun?.payrollPeriod?.startDate
+        const periodEnd = ps.payrollRun?.payrollPeriod?.endDate
+        let actualPresent = 0
+        if (periodStart && periodEnd) {
+          actualPresent = await prisma.attendanceRecord.count({
+            where: {
+              employeeId: ps.employeeId,
+              attendanceDate: { gte: periodStart, lte: periodEnd },
+              firstCheckIn: { not: null }
+            }
+          })
+        }
+        return {
+          ...ps,
+          daysPresent: actualPresent
+        }
+      })
+    )
+
+    return slipsWithAttendance
   },
 
   async getPayslipById(entryId, requestingUser = null) {
@@ -1830,6 +1995,17 @@ export const payrollService = {
       statutoryLiability = 0
     }
 
+    const actualPresentCount = await prisma.attendanceRecord.count({
+      where: {
+        employeeId: entry.employeeId,
+        attendanceDate: {
+          gte: entry.payrollRun.payrollPeriod.startDate,
+          lte: entry.payrollRun.payrollPeriod.endDate
+        },
+        firstCheckIn: { not: null }
+      }
+    })
+
     return {
       id: entry.id,
       payslipNumber: `SLIP-${entry.payrollRun.payrollPeriod.periodCode}-${entry.employee.employeeCode}`,
@@ -1855,10 +2031,12 @@ export const payrollService = {
       timeAndAttendance: {
         calendarDays: entry.calendarDays,
         payableDays: Number(entry.payableDays),
+        daysPresent: actualPresentCount,
         unpaidDays: Number(entry.unpaidLeaveDays),
         extraLeaveDays: Number(entry.unpaidLeaveDays),
         overtimeHours: Number(entry.overtimeHours)
       },
+      daysPresent: actualPresentCount,
       earnings: {
         basicSalary: Number(entry.basicSalary),
         dailyBasicRate: Math.round((Number(entry.basicSalary) / 31) * 100) / 100, // FIXED 31-DAY RATE

@@ -971,8 +971,8 @@ export async function syncPayroll() {
           periodName: ps.payrollRun?.payrollPeriod
             ? new Date(`${ps.payrollRun.payrollPeriod.year}-${String(ps.payrollRun.payrollPeriod.month).padStart(2, '0')}-01T12:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric' })
             : periodCode,
-          workingDays: ps.calendarDays ?? 31,
-          daysPresent: Number(ps.payableDays ?? ps.calendarDays ?? 31),
+          workingDays: ps.calendarDays ?? 30,
+          daysPresent: Number(ps.daysPresent ?? 0),
           unpaidLeaves: Number(ps.unpaidLeaveDays ?? 0),
           overtimeHours: Number(ps.overtimeHours ?? 0),
           basicSalary,

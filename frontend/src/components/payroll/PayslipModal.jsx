@@ -164,11 +164,11 @@ export default function PayslipModal({ payslip, isOpen, onClose }) {
           <div className="grid grid-cols-4 gap-2 text-center text-[10.5px] py-1.5 px-2 bg-blue-50/50 rounded-lg border border-blue-100">
             <div>
               <span className="block text-[8.5px] text-slate-500 uppercase font-semibold">Working Days</span>
-              <span className="font-bold text-navy-950">{payslip.workingDays || 30}</span>
+              <span className="font-bold text-navy-950">{payslip.workingDays || payslip.calendarDays || 30}</span>
             </div>
             <div>
               <span className="block text-[8.5px] text-slate-500 uppercase font-semibold">Days Present</span>
-              <span className="font-bold text-emerald-700">{payslip.daysPresent || 30}</span>
+              <span className="font-bold text-emerald-700">{payslip.daysPresent !== undefined && payslip.daysPresent !== null ? payslip.daysPresent : 0}</span>
             </div>
             <div>
               <span className="block text-[8.5px] text-slate-500 uppercase font-semibold">Unpaid Leaves</span>
