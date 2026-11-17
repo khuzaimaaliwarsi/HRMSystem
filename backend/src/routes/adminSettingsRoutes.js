@@ -142,6 +142,13 @@ router.post('/users/:id/reset-password', requireRoles('SUPER_ADMIN'), async (req
   } catch (err) { next(err) }
 })
 
+router.post('/users/:id/unlock', requireRoles('SUPER_ADMIN'), async (req, res, next) => {
+  try {
+    const result = await adminSettingsService.unlockUser(req.params.id, req.user)
+    return sendSuccess(res, result)
+  } catch (err) { next(err) }
+})
+
 router.delete('/users/:id', requireRoles('SUPER_ADMIN'), async (req, res, next) => {
   try {
     const result = await adminSettingsService.deleteUser(req.params.id, req.user)

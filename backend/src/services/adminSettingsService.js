@@ -635,6 +635,8 @@ export class AdminSettingsService {
         isProtected: true,
         employeeId: true,
         lastLoginAt: true,
+        failedLoginAttempts: true,
+        lockedUntil: true,
         createdAt: true,
         employee: {
           select: { id: true, employeeCode: true, firstName: true, lastName: true, departmentId: true }
@@ -716,11 +718,15 @@ export class AdminSettingsService {
       parallelism: 4
     })
 
-    // Execute in transaction: update password & purge sessions
+    // Execute in transaction: update password, unlock account & purge sessions
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
-        data: { passwordHash }
+        data: {
+          passwordHash,
+          failedLoginAttempts: 0,
+          lockedUntil: null
+        }
       })
 
       // Invalidate all existing sessions
@@ -742,6 +748,34 @@ export class AdminSettingsService {
     })
 
     return { message: `Password reset successfully for user ${targetUser.username}. All existing sessions revoked.` }
+  }
+
+  async unlockUser(userId, actorUser) {
+    const targetUser = await prisma.user.findUnique({ where: { id: userId } })
+    if (!targetUser) throw new AppError('User not found', 404, 'NOT_FOUND')
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null
+      }
+    })
+
+    const actorExists = actorUser?.id ? await prisma.user.count({ where: { id: actorUser.id } }) : 0
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: actorExists ? actorUser.id : null,
+        actorRole: actorUser?.role || 'SUPER_ADMIN',
+        actionType: 'USER_UNLOCKED',
+        sourceModule: 'ADMIN_SETTINGS',
+        entityName: 'User',
+        entityId: userId,
+        recordSnapshotAfter: { username: targetUser.username, action: 'Account unlocked by admin' }
+      }
+    }).catch(() => {})
+
+    return { message: `Account for user ${targetUser.username} has been successfully unlocked.` }
   }
 
   async createUser({ displayName = null, username, email, password, role = 'EMPLOYEE', employeeId = null, isActive = true }, actorUser) {
@@ -853,7 +887,7 @@ export class AdminSettingsService {
     return newUser
   }
 
-  async updateUser(userId, { displayName, role, email, username, employeeId, isActive }, actorUser) {
+  async updateUser(userId, { displayName, role, email, username, employeeId, isActive, unlockAccount }, actorUser) {
     const targetUser = await prisma.user.findUnique({ where: { id: userId } })
     if (!targetUser) throw new AppError('User not found', 404, 'NOT_FOUND')
 
@@ -903,6 +937,10 @@ export class AdminSettingsService {
       updateData.employeeId = employeeId || null
     }
     if (isActive !== undefined) updateData.isActive = Boolean(isActive)
+    if (unlockAccount || updateData.isActive === true) {
+      updateData.failedLoginAttempts = 0
+      updateData.lockedUntil = null
+    }
 
     // If deactivating, terminate active sessions
     if (updateData.isActive === false) {

@@ -71,12 +71,15 @@ export const authService = {
       throw error
     }
 
-    // Lookup user by username or email
+    // Lookup user by username, email, or linked employee ID/code
+    const cleanId = identifier.trim()
     const user = await prisma.user.findFirst({
       where: {
         OR: [
-          { username: { equals: identifier.trim(), mode: 'insensitive' } },
-          { email: { equals: identifier.trim().toLowerCase(), mode: 'insensitive' } }
+          { username: { equals: cleanId, mode: 'insensitive' } },
+          { email: { equals: cleanId.toLowerCase(), mode: 'insensitive' } },
+          { employee: { employeeCode: { equals: cleanId, mode: 'insensitive' } } },
+          { employee: { id: cleanId } }
         ]
       },
       include: {

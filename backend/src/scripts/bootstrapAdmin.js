@@ -7,7 +7,7 @@
  */
 
 import authService from '../services/authService.js'
-import { disconnectDatabase } from '../config/database.js'
+import { prisma, disconnectDatabase } from '../config/database.js'
 import env from '../config/env.js'
 
 async function main() {
@@ -34,6 +34,25 @@ async function main() {
       console.log(`Username    : ${result.username}`)
       console.log('Notice      : Bootstrap skipped. Existing protected account preserved.')
     }
+
+    // Auto-unlock any accounts that were locked out due to previous failed attempts
+    try {
+      const unlocked = await prisma.user.updateMany({
+        where: {
+          OR: [
+            { lockedUntil: { not: null } },
+            { failedLoginAttempts: { gt: 0 } }
+          ]
+        },
+        data: {
+          lockedUntil: null,
+          failedLoginAttempts: 0
+        }
+      })
+      if (unlocked.count > 0) {
+        console.log(`Lockout     : [CLEARED] Reset lockouts for ${unlocked.count} accounts.`)
+      }
+    } catch (_) {}
 
     console.log('='.repeat(65))
     await disconnectDatabase()
