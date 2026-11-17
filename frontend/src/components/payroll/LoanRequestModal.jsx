@@ -25,6 +25,10 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
     purpose: '',
   });
 
+  const [isAddingCustomType, setIsAddingCustomType] = useState(false);
+  const [customTypeName, setCustomTypeName] = useState('');
+  const [customTypes, setCustomTypes] = useState([]);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -243,19 +247,74 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Facility Type</label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  type: e.target.value,
-                  tenureMonths: ''
-                })}
-                className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600"
-              >
-                <option value="PERSONAL_LOAN">Company Loan</option>
-                <option value="SALARY_ADVANCE">Salary Advance (1 Month)</option>
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Facility / Category <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustomType(!isAddingCustomType)}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                >
+                  {isAddingCustomType ? '✕ Cancel' : '+ Add Custom Category'}
+                </button>
+              </div>
+
+              {isAddingCustomType ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={customTypeName}
+                    onChange={(e) => setCustomTypeName(e.target.value)}
+                    placeholder="e.g. Vehicle Loan, Home Renovation..."
+                    className="flex-1 text-xs px-2.5 py-1.5 border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = customTypeName.trim();
+                      if (trimmed) {
+                        if (!customTypes.includes(trimmed)) {
+                          setCustomTypes([...customTypes, trimmed]);
+                        }
+                        setFormData({ ...formData, type: trimmed });
+                        setIsAddingCustomType(false);
+                        setCustomTypeName('');
+                      }
+                    }}
+                    className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={formData.type}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom_new__') {
+                      setIsAddingCustomType(true);
+                    } else {
+                      setFormData({
+                        ...formData,
+                        type: e.target.value,
+                        tenureMonths: ''
+                      });
+                    }
+                  }}
+                  className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600 cursor-pointer"
+                >
+                  <option value="PERSONAL_LOAN">Personal Loan</option>
+                  <option value="COMPANY_LOAN">Company Loan</option>
+                  <option value="SALARY_ADVANCE">Salary Advance (1 Month)</option>
+                  <option value="EMERGENCY_ASSISTANCE">Emergency Assistance / Loan</option>
+                  <option value="EQUIPMENT_LOAN">Equipment / Tool Loan</option>
+                  {customTypes.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                  <option value="__custom_new__">+ Add Custom Category...</option>
+                </select>
+              )}
             </div>
 
             <div>

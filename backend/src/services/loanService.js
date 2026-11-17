@@ -223,18 +223,28 @@ export const loanService = {
     const countTotal = await prisma.employeeLoan.count()
     const loanNumber = `LN-${year}-${String(countTotal + 1).padStart(3, '0')}`
 
+    // Map custom category cleanly if not in standard PostgreSQL enum
+    const validLoanTypes = ['SALARY_ADVANCE', 'PERSONAL_LOAN', 'EMERGENCY_ASSISTANCE', 'EQUIPMENT_LOAN']
+    let dbLoanType = loanType
+    let updatedRemarks = remarks?.trim() || null
+    if (!validLoanTypes.includes(loanType)) {
+      dbLoanType = 'PERSONAL_LOAN'
+      const customPrefix = `[Category: ${loanType}]`
+      updatedRemarks = updatedRemarks ? `${customPrefix} ${updatedRemarks}` : customPrefix
+    }
+
     const loan = await prisma.employeeLoan.create({
       data: {
         loanNumber,
         employeeId: targetEmployeeId,
-        loanType,
+        loanType: dbLoanType,
         principalAmount: new Prisma.Decimal(principal.toFixed(2)),
         repaymentMonths: months,
         monthlyInstallment: new Prisma.Decimal(monthlyInstallment.toFixed(2)),
         totalRepaidAmount: new Prisma.Decimal('0.00'),
         remainingBalance: new Prisma.Decimal(principal.toFixed(2)),
         status: 'PENDING',
-        remarks: remarks?.trim() || null
+        remarks: updatedRemarks
       },
       include: {
         employee: {

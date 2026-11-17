@@ -305,23 +305,49 @@ export function calculateTimeDuration(startTime, endTime) {
   }
 }
 
+let serverTimeSkewMs = 0
+
+/**
+ * Synchronizes client clock with authoritative server timestamp.
+ * Decouples system clock/calendar from laptop's manual time.
+ * @param {string|number|Date} serverTimeInput
+ */
+export function syncServerTime(serverTimeInput) {
+  if (!serverTimeInput) return
+  const serverTime = new Date(serverTimeInput).getTime()
+  if (isNaN(serverTime)) return
+  serverTimeSkewMs = serverTime - Date.now()
+}
+
+export function getServerTimeSkew() {
+  return serverTimeSkewMs
+}
+
+/**
+ * Returns current Date object synchronized to authoritative server time.
+ */
+export function getTrustedNow() {
+  return new Date(Date.now() + serverTimeSkewMs)
+}
+
 /**
  * Returns current business date in Asia/Karachi timezone as strict YYYY-MM-DD.
  */
 export function getKarachiToday() {
   try {
-    const d = new Date()
+    const d = getTrustedNow()
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' })
     return formatter.format(d)
   } catch {
-    return new Date().toISOString().slice(0, 10)
+    return getTrustedNow().toISOString().slice(0, 10)
   }
 }
 
 /**
  * Returns current time in Asia/Karachi timezone in 24-hour format HH:MM (or HH:MM:SS).
  */
-export function getKarachiTime(d = new Date(), options = {}) {
+export function getKarachiTime(d = null, options = {}) {
+  const dateObj = d ? new Date(d) : getTrustedNow()
   try {
     return new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Karachi',
@@ -329,16 +355,17 @@ export function getKarachiTime(d = new Date(), options = {}) {
       minute: '2-digit',
       second: options.seconds ? '2-digit' : undefined,
       hour12: options.hour12 !== undefined ? options.hour12 : false
-    }).format(d)
+    }).format(dateObj)
   } catch {
-    return d.toTimeString().slice(0, options.seconds ? 8 : 5)
+    return dateObj.toTimeString().slice(0, options.seconds ? 8 : 5)
   }
 }
 
 /**
  * Returns current formatted live clock time string in Asia/Karachi timezone (e.g. 08:35:10 PM).
  */
-export function getKarachiTimeString(d = new Date()) {
+export function getKarachiTimeString(d = null) {
+  const dateObj = d ? new Date(d) : getTrustedNow()
   try {
     return new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Karachi',
@@ -346,9 +373,9 @@ export function getKarachiTimeString(d = new Date()) {
       minute: '2-digit',
       second: '2-digit',
       hour12: true
-    }).format(d)
+    }).format(dateObj)
   } catch {
-    return d.toLocaleTimeString()
+    return dateObj.toLocaleTimeString()
   }
 }
 

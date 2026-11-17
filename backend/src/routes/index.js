@@ -21,8 +21,27 @@ import travelExpenseRoutes from './travelExpenseRoutes.js'
 import reportRoutes from './reportRoutes.js'
 import adminSettingsRoutes from './adminSettingsRoutes.js'
 import hrLettersRoutes from './hrLettersRoutes.js'
+import { getKarachiDate, getKarachiTime, format12Hour } from '../utils/time.js'
 
 const apiRouter = Router()
+
+// Trusted Server Time Sync (Asia/Karachi UTC+5)
+apiRouter.get('/time', (_req, res) => {
+  const now = new Date()
+  const karachiDate = getKarachiDate(now)
+  const karachiTime = getKarachiTime(now)
+  return res.json({
+    success: true,
+    data: {
+      serverTimeIso: now.toISOString(),
+      serverEpochMs: now.getTime(),
+      timeZone: 'Asia/Karachi',
+      karachiDate,
+      karachiTime,
+      karachiTime12: format12Hour(karachiTime)
+    }
+  })
+})
 
 // Health and System Diagnostics
 apiRouter.use('/health', healthRoutes)

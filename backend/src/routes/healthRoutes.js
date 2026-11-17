@@ -46,6 +46,30 @@ router.get('/', async (_req, res, next) => {
 })
 
 /**
+ * GET /api/v1/health/time
+ * Authoritative Server Time in Asia/Karachi (PKT, UTC+5)
+ */
+router.get('/time', (_req, res) => {
+  const now = new Date()
+  const d = new Date(now)
+  const karachiDate = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' })
+  const karachiTime = d.toLocaleTimeString('en-GB', {
+    timeZone: 'Asia/Karachi',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+  return sendSuccess(res, {
+    serverTimeIso: now.toISOString(),
+    serverEpochMs: now.getTime(),
+    timeZone: 'Asia/Karachi',
+    karachiDate,
+    karachiTime
+  }, undefined, 200)
+})
+
+/**
  * GET /api/v1/health/db
  * Dedicated database connectivity probe.
  */

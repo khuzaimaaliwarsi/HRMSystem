@@ -40,7 +40,9 @@ export const attendanceService = {
       throw error
     }
 
-    const punchDateTime = new Date(punchTime)
+    // Authoritative server timestamp for web punches to prevent client clock manipulation
+    const isWebPunch = String(source || '').toUpperCase() === 'WEB'
+    const punchDateTime = (isWebPunch || !punchTime) ? new Date() : new Date(punchTime)
     const businessDateStr = getKarachiDate(punchDateTime)
     const businessDate = new Date(businessDateStr)
     const punchTimeStr = getKarachiTime(punchDateTime)
@@ -153,7 +155,9 @@ export const attendanceService = {
       throw error
     }
 
-    const punchDateTime = new Date(punchTime)
+    // Authoritative server timestamp for web punches to prevent client clock manipulation
+    const isWebPunch = String(source || '').toUpperCase() === 'WEB'
+    const punchDateTime = (isWebPunch || !punchTime) ? new Date() : new Date(punchTime)
     const businessDateStr = getKarachiDate(punchDateTime)
     const businessDate = new Date(businessDateStr)
     const punchTimeStr = getKarachiTime(punchDateTime)
@@ -373,6 +377,56 @@ export const attendanceService = {
 
         if (lateMin > 0) lateCount++
 
+        // Map punches for Immutable Raw Punch Audit modal
+        const rawPunches = existingRecord?.punches || []
+        const punches = rawPunches.map((p) => ({
+          id: p.id,
+          type: p.punchType === 'CHECK_IN' ? 'IN' : p.punchType === 'CHECK_OUT' ? 'OUT' : (String(p.punchType).includes('IN') ? 'IN' : 'OUT'),
+          punchType: p.punchType,
+          timestamp: format12Hour(getKarachiTime(p.punchTime)),
+          punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime)),
+          source: p.source || 'WEB',
+          verified: true,
+          notes: p.notes || null
+        }))
+
+        // Fallback: If attendance_punches has 0 rows but record has firstCheckIn / lastCheckOut
+        if (punches.length === 0 && (existingRecord?.firstCheckIn || existingRecord?.lastCheckOut)) {
+          if (existingRecord.firstCheckIn) {
+            punches.push({
+              id: `${existingRecord.id}-in`,
+              type: 'IN',
+              punchType: 'CHECK_IN',
+              timestamp: format12Hour(getKarachiTime(existingRecord.firstCheckIn)),
+              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.firstCheckIn)),
+              source: 'WEB',
+              verified: true,
+              notes: 'Recorded Check-In'
+            })
+          }
+          if (existingRecord.lastCheckOut) {
+            punches.push({
+              id: `${existingRecord.id}-out`,
+              type: 'OUT',
+              punchType: 'CHECK_OUT',
+              timestamp: format12Hour(getKarachiTime(existingRecord.lastCheckOut)),
+              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.lastCheckOut)),
+              source: 'WEB',
+              verified: true,
+              notes: 'Recorded Check-Out'
+            })
+          }
+        }
+
+        let recordNotes = existingRecord?.remarks || null
+        if (!recordNotes) {
+          if (existingRecord?.firstCheckIn && existingRecord?.lastCheckOut) {
+            recordNotes = `Shift completed (${(workedMinutes / 60).toFixed(1)}h worked)`
+          } else if (existingRecord?.firstCheckIn) {
+            recordNotes = 'Shift in progress (Checked In)'
+          }
+        }
+
         return {
           employeeId: emp.id,
           employeeCode: emp.employeeCode,
@@ -396,7 +450,9 @@ export const attendanceService = {
           earlyExitMinutes: earlyExitMin,
           status: rowStatus,
           hasPendingCorrection,
-          attendanceRecordId: existingRecord?.id || null
+          attendanceRecordId: existingRecord?.id || null,
+          punches,
+          notes: recordNotes
         }
       })
     )
@@ -477,6 +533,60 @@ export const attendanceService = {
         punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime))
       }))
     }))
+  },
+
+  /**
+   * Returns immutable punch events for an attendance record with fallback to firstCheckIn/lastCheckOut
+   */
+  async getRecordPunches(recordId) {
+    if (!recordId) return []
+    const record = await prisma.attendanceRecord.findUnique({
+      where: { id: recordId },
+      include: {
+        punches: { orderBy: { punchTime: 'asc' } }
+      }
+    })
+    if (!record) return []
+
+    const list = (record.punches || []).map((p) => ({
+      id: p.id,
+      type: p.punchType === 'CHECK_IN' ? 'IN' : p.punchType === 'CHECK_OUT' ? 'OUT' : (String(p.punchType).includes('IN') ? 'IN' : 'OUT'),
+      punchType: p.punchType,
+      timestamp: format12Hour(getKarachiTime(p.punchTime)),
+      punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime)),
+      source: p.source || 'WEB',
+      verified: true,
+      notes: p.notes || null
+    }))
+
+    if (list.length === 0 && (record.firstCheckIn || record.lastCheckOut)) {
+      if (record.firstCheckIn) {
+        list.push({
+          id: `${record.id}-in`,
+          type: 'IN',
+          punchType: 'CHECK_IN',
+          timestamp: format12Hour(getKarachiTime(record.firstCheckIn)),
+          punchTimeFormatted: format12Hour(getKarachiTime(record.firstCheckIn)),
+          source: 'WEB',
+          verified: true,
+          notes: 'Recorded Check-In'
+        })
+      }
+      if (record.lastCheckOut) {
+        list.push({
+          id: `${record.id}-out`,
+          type: 'OUT',
+          punchType: 'CHECK_OUT',
+          timestamp: format12Hour(getKarachiTime(record.lastCheckOut)),
+          punchTimeFormatted: format12Hour(getKarachiTime(record.lastCheckOut)),
+          source: 'WEB',
+          verified: true,
+          notes: 'Recorded Check-Out'
+        })
+      }
+    }
+
+    return list
   }
 }
 

@@ -8,6 +8,8 @@
  * - Event-based session expiry notifications
  */
 
+import { syncServerTime } from '../lib/dateUtils.js'
+
 export class ApiError extends Error {
   constructor(message, status = 500, code = 'API_ERROR', details = null) {
     super(message)
@@ -105,6 +107,10 @@ async function request(endpoint, options = {}, isRetry = false) {
 
   try {
     response = await fetch(url, fetchOptions)
+    try {
+      const serverTime = response.headers?.get?.('x-server-time') || response.headers?.get?.('date')
+      if (serverTime) syncServerTime(serverTime)
+    } catch (_) {}
   } catch (networkError) {
     if (isSafeIdempotent && !isRetry) {
       await new Promise((resolve) => setTimeout(resolve, 600))

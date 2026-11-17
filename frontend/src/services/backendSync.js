@@ -294,6 +294,32 @@ export async function syncAttendanceAndShifts() {
           : (r.checkOutTime || null)
         const isPresent = Boolean(checkInTime)
         const status = isPresent ? 'Present' : (r.status === 'ABSENT' ? 'Absent' : (r.status === 'HALF_DAY' ? 'Half Day' : (r.status || 'Scheduled')))
+        const rawPunches = Array.isArray(r.punches) && r.punches.length > 0 ? r.punches : [
+          checkInTime ? {
+            id: `${r.attendanceRecordId || empCode}-in`,
+            type: 'IN',
+            timestamp: formatTimeTo12Hour(checkInTime),
+            source: 'WEB',
+            verified: true
+          } : null,
+          checkOutTime ? {
+            id: `${r.attendanceRecordId || empCode}-out`,
+            type: 'OUT',
+            timestamp: formatTimeTo12Hour(checkOutTime),
+            source: 'WEB',
+            verified: true
+          } : null
+        ].filter(Boolean)
+
+        let recordNotes = r.notes || null
+        if (!recordNotes) {
+          if (checkInTime && checkOutTime) {
+            recordNotes = `Shift completed (${(parseFloat(r.workedHours) || 0).toFixed(1)}h worked)`
+          } else if (checkInTime) {
+            recordNotes = 'Shift in progress (Checked In)'
+          }
+        }
+
         return {
           id: r.attendanceRecordId || r.id || `ATT-${empCode}-${regDate}`,
           cuid: r.attendanceRecordId || r.id,
@@ -318,7 +344,9 @@ export async function syncAttendanceAndShifts() {
           workedMinutes: r.workedMinutes || 0,
           lateMinutes: r.lateMinutes || 0,
           earlyExitMinutes: r.earlyExitMinutes || 0,
-          hasPendingCorrection: Boolean(r.hasPendingCorrection)
+          hasPendingCorrection: Boolean(r.hasPendingCorrection),
+          punches: rawPunches,
+          notes: recordNotes
         }
       })
       const currentList = attendanceService.getAttendanceRecords() || []

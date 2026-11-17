@@ -64,6 +64,15 @@ export function createApp() {
   // Request Logging
   app.use(requestLogger)
 
+  // Trusted Server Time & Timezone Header Injection (Asia/Karachi UTC+5)
+  app.use((_req, res, next) => {
+    const now = new Date()
+    res.setHeader('X-Server-Time', now.toISOString())
+    res.setHeader('X-Server-Timezone', 'Asia/Karachi')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Server-Time, X-Server-Timezone')
+    next()
+  })
+
   // Root redirect/status
   app.get('/', (_req, res) => {
     res.json({

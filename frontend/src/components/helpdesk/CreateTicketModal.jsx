@@ -16,18 +16,25 @@ export default function CreateTicketModal({
   const [description, setDescription] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAddingCustomCat, setIsAddingCustomCat] = useState(false)
+  const [customCatName, setCustomCatName] = useState('')
+  const [categoryList, setCategoryList] = useState(categories)
 
   useEffect(() => {
-    if (categories.length > 0 && !categoryId) {
-      setCategoryId(categories[0].categoryId)
-      setSubcategory(categories[0].subcategories?.[0] || '')
+    setCategoryList(categories)
+  }, [categories])
+
+  useEffect(() => {
+    if (categoryList.length > 0 && !categoryId) {
+      setCategoryId(categoryList[0].categoryId)
+      setSubcategory(categoryList[0].subcategories?.[0] || '')
     }
-  }, [categories, categoryId])
+  }, [categoryList, categoryId])
 
   const handleCategoryChange = (e) => {
     const val = e.target.value
     setCategoryId(val)
-    const selected = categories.find((c) => c.categoryId === val)
+    const selected = categoryList.find((c) => c.categoryId === val)
     if (selected && selected.subcategories?.length > 0) {
       setSubcategory(selected.subcategories[0])
     } else {
@@ -35,7 +42,7 @@ export default function CreateTicketModal({
     }
   }
 
-  const selectedCategoryObj = categories.find((c) => c.categoryId === categoryId)
+  const selectedCategoryObj = categoryList.find((c) => c.categoryId === categoryId)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -125,20 +132,67 @@ export default function CreateTicketModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Category <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={categoryId}
-                onChange={handleCategoryChange}
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                {categories.map((c) => (
-                  <option key={c.categoryId} value={c.categoryId}>
-                    {c.categoryName} {c.isConfidential ? '(Confidential)' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Category <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustomCat(!isAddingCustomCat)}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                >
+                  {isAddingCustomCat ? '✕ Cancel' : '+ Add Custom Category'}
+                </button>
+              </div>
+
+              {isAddingCustomCat ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={customCatName}
+                    onChange={(e) => setCustomCatName(e.target.value)}
+                    placeholder="e.g. Facilities & IT Assets"
+                    className="flex-1 text-xs px-2.5 py-1.5 border border-indigo-400 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = customCatName.trim()
+                      if (trimmed) {
+                        const newCat = { categoryId: `CAT-CUSTOM-${Date.now()}`, categoryName: trimmed, subcategories: ['General'] }
+                        setCategoryList(prev => [...prev, newCat])
+                        setCategoryId(newCat.categoryId)
+                        setSubcategory('General')
+                        setIsAddingCustomCat(false)
+                        setCustomCatName('')
+                      }
+                    }}
+                    className="px-2.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition cursor-pointer"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={categoryId}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom_new__') {
+                      setIsAddingCustomCat(true)
+                    } else {
+                      handleCategoryChange(e)
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {categoryList.map((c) => (
+                    <option key={c.categoryId} value={c.categoryId}>
+                      {c.categoryName} {c.isConfidential ? '(Confidential)' : ''}
+                    </option>
+                  ))}
+                  <option value="__custom_new__">+ Add Custom Category...</option>
+                </select>
+              )}
             </div>
 
             <div>

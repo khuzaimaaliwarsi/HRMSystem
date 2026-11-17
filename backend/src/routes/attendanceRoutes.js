@@ -116,6 +116,19 @@ router.get('/history/:employeeId', requireEmployeeScope((req) => req.params.empl
   }
 })
 
+/**
+ * GET /api/v1/attendance/records/:id/punches
+ * Returns immutable raw punch audit logs for a specific attendance record
+ */
+router.get('/records/:id/punches', async (req, res, next) => {
+  try {
+    const punches = await attendanceService.getRecordPunches(req.params.id)
+    return sendSuccess(res, { punches }, undefined, 200)
+  } catch (err) {
+    next(err)
+  }
+})
+
 // ==============================================================================
 // 2. ATTENDANCE REGULARIZATION / CORRECTIONS
 // ==============================================================================

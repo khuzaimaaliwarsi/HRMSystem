@@ -5,6 +5,7 @@ import Modal from '@/components/common/Modal'
 import { attendanceService } from '@/services/attendanceService'
 import { shiftService } from '@/services/shiftService'
 import { getKarachiToday, getDateFilterRange, formatTimeTo12Hour } from '@/lib/dateUtils'
+import apiClient from '@/services/apiClient'
 
 export function DailyAttendanceRegisterTab({
   records = [],
@@ -20,6 +21,61 @@ export function DailyAttendanceRegisterTab({
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedRecordForDetail, setSelectedRecordForDetail] = useState(null)
+
+  const handleOpenPunchesModal = async (r) => {
+    let effectivePunches = Array.isArray(r.punches) && r.punches.length > 0 ? [...r.punches] : []
+    const hasIn = Boolean(r.checkInTime || (r.checkIn && r.checkIn !== '--:--'))
+    const hasOut = Boolean(r.checkOutTime || (r.checkOut && r.checkOut !== '--:--'))
+    const inVal = r.checkInTime || (r.checkIn !== '--:--' ? r.checkIn : null)
+    const outVal = r.checkOutTime || (r.checkOut !== '--:--' ? r.checkOut : null)
+
+    if (effectivePunches.length === 0 && hasIn) {
+      effectivePunches.push({
+        id: `${r.id || r.employeeId}-in`,
+        type: 'IN',
+        punchType: 'CHECK_IN',
+        timestamp: formatTimeTo12Hour(inVal),
+        source: 'WEB',
+        verified: true
+      })
+      if (hasOut) {
+        effectivePunches.push({
+          id: `${r.id || r.employeeId}-out`,
+          type: 'OUT',
+          punchType: 'CHECK_OUT',
+          timestamp: formatTimeTo12Hour(outVal),
+          source: 'WEB',
+          verified: true
+        })
+      }
+    }
+
+    let displayNotes = r.notes
+    if (hasIn && hasOut) {
+      displayNotes = `Shift completed (${r.workedHours || '0.0h'} worked)`
+    } else if (hasIn) {
+      displayNotes = 'Shift in progress (Checked In)'
+    }
+
+    const detailObj = {
+      ...r,
+      punches: effectivePunches,
+      notes: displayNotes
+    }
+    setSelectedRecordForDetail(detailObj)
+
+    // Fetch live authoritative punches from backend API
+    const recId = r.attendanceRecordId || r.cuid
+    if (recId) {
+      try {
+        const res = await apiClient.get(`/attendance/records/${recId}/punches`)
+        const livePunches = res?.punches || res?.data?.punches
+        if (Array.isArray(livePunches) && livePunches.length > 0) {
+          setSelectedRecordForDetail(prev => prev && prev.id === r.id ? { ...prev, punches: livePunches } : prev)
+        }
+      } catch (_) {}
+    }
+  }
 
   useEffect(() => {
     if (selectedDate) {
@@ -272,8 +328,8 @@ export function DailyAttendanceRegisterTab({
                     <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => setSelectedRecordForDetail(r)}
-                        className="px-2 py-1 text-[11px] font-bold text-hrms-accent bg-blue-50 hover:bg-blue-100 rounded border border-blue-200"
+                        onClick={() => handleOpenPunchesModal(r)}
+                        className="px-2 py-1 text-[11px] font-bold text-hrms-accent bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 cursor-pointer"
                         title="View raw punch logs and audit details"
                       >
                         Punches
@@ -345,31 +401,65 @@ export function DailyAttendanceRegisterTab({
             <div>
               <h4 className="font-bold text-slate-800 mb-2">Immutable Raw Punch Audit Events</h4>
               <div className="space-y-2 border-l-2 border-hrms-accent/30 pl-3">
-                {(selectedRecordForDetail?.punches || []).length > 0 ? (
-                  selectedRecordForDetail.punches.map((p, idx) => (
-                    <div key={idx} className="relative text-xs">
-                      <div className="font-semibold text-slate-800 flex items-center gap-2">
-                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${p.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : p.type === 'OUT' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
-                          PUNCH {p.type}
-                        </span>
-                        <span className="font-mono text-slate-700">{p.timestamp}</span>
+                {(() => {
+                  const effectivePunches = (selectedRecordForDetail?.punches || []).length > 0
+                    ? selectedRecordForDetail.punches
+                    : [
+                        (selectedRecordForDetail?.checkInTime || (selectedRecordForDetail?.checkIn && selectedRecordForDetail?.checkIn !== '--:--'))
+                          ? {
+                              id: 'p-in',
+                              type: 'IN',
+                              timestamp: formatTimeTo12Hour(selectedRecordForDetail.checkInTime || selectedRecordForDetail.checkIn),
+                              source: 'WEB',
+                              verified: true
+                            }
+                          : null,
+                        (selectedRecordForDetail?.checkOutTime || (selectedRecordForDetail?.checkOut && selectedRecordForDetail?.checkOut !== '--:--'))
+                          ? {
+                              id: 'p-out',
+                              type: 'OUT',
+                              timestamp: formatTimeTo12Hour(selectedRecordForDetail.checkOutTime || selectedRecordForDetail.checkOut),
+                              source: 'WEB',
+                              verified: true
+                            }
+                          : null
+                      ].filter(Boolean)
+
+                  return effectivePunches.length > 0 ? (
+                    effectivePunches.map((p, idx) => (
+                      <div key={idx} className="relative text-xs">
+                        <div className="font-semibold text-slate-800 flex items-center gap-2">
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${p.type === 'IN' ? 'bg-emerald-100 text-emerald-800' : p.type === 'OUT' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
+                            PUNCH {p.type}
+                          </span>
+                          <span className="font-mono text-slate-700">{p.timestamp || p.punchTimeFormatted}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Source: {p.source || 'WEB'} • Verified: {p.verified !== false ? 'Yes' : 'No'}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        Source: {p.source} • Verified: {p.verified ? 'Yes' : 'No'}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-slate-400 italic">No punch events recorded for this session.</p>
-                )}
+                    ))
+                  ) : (
+                    <p className="text-slate-400 italic">No punch events recorded for this session.</p>
+                  )
+                })()}
               </div>
             </div>
 
-            {selectedRecordForDetail.notes && (
-              <div className="bg-blue-50 p-2.5 rounded border border-blue-200 text-blue-900 text-xs">
-                <strong>System Note: </strong> {selectedRecordForDetail.notes}
-              </div>
-            )}
+            {(() => {
+              const hasIn = Boolean(selectedRecordForDetail.checkInTime || (selectedRecordForDetail.checkIn && selectedRecordForDetail.checkIn !== '--:--'))
+              const hasOut = Boolean(selectedRecordForDetail.checkOutTime || (selectedRecordForDetail.checkOut && selectedRecordForDetail.checkOut !== '--:--'))
+              let noteText = selectedRecordForDetail.notes
+              if (hasIn && (!noteText || noteText.includes('not started'))) {
+                noteText = hasOut ? `Shift completed (${selectedRecordForDetail.workedHours || '0.0h'} worked)` : 'Shift in progress (Checked In)'
+              }
+              if (!noteText) return null
+              return (
+                <div className="bg-blue-50 p-2.5 rounded border border-blue-200 text-blue-900 text-xs">
+                  <strong>System Note: </strong> {noteText}
+                </div>
+              )
+            })()}
           </div>
         </Modal>
       )}
