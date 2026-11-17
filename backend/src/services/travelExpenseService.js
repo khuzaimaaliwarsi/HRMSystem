@@ -4451,10 +4451,100 @@ export class TravelExpenseService {
 
   async getExpenseCategories() {
     const settings = await prisma.organizationSetting.findFirst()
-    if (!settings || !Array.isArray(settings.settingsJson?.expenseCategories)) {
-      return []
+    let list = settings?.settingsJson?.expenseCategories
+    if (!Array.isArray(list) || list.length === 0) {
+      const defaultCategories = [
+        {
+          categoryId: 'CAT-TRV',
+          categoryName: 'Official Travel',
+          code: 'TRV',
+          description: 'Intercity official travel, flights, railway and local transit for business purposes.',
+          perClaimLimit: 150000,
+          monthlyLimit: 300000,
+          dailyLimit: 40000,
+          receiptRequiredThreshold: 1000,
+          requiresTravelRequestRef: true,
+          requiresPreApproval: true,
+          isActive: true,
+          allowAllowanceOverlap: false
+        },
+        {
+          categoryId: 'CAT-FUEL',
+          categoryName: 'Fuel',
+          code: 'FUEL',
+          description: 'Actual vehicle fuel expenditure incurred for company errands and client visits.',
+          perClaimLimit: 25000,
+          monthlyLimit: 60000,
+          dailyLimit: 12000,
+          receiptRequiredThreshold: 500,
+          requiresTravelRequestRef: false,
+          requiresPreApproval: false,
+          isActive: true,
+          allowAllowanceOverlap: false
+        },
+        {
+          categoryId: 'CAT-MEAL',
+          categoryName: 'Food / Meals',
+          code: 'MEAL',
+          description: 'Authorized business meal expenses and official client entertainment.',
+          perClaimLimit: 15000,
+          monthlyLimit: 40000,
+          dailyLimit: 8000,
+          receiptRequiredThreshold: 500,
+          requiresTravelRequestRef: false,
+          requiresPreApproval: false,
+          isActive: true,
+          allowAllowanceOverlap: true
+        },
+        {
+          categoryId: 'CAT-CLNT',
+          categoryName: 'Client Meetings',
+          code: 'CLNT',
+          description: 'Client presentations, official business dining and boardroom hospitality.',
+          perClaimLimit: 35000,
+          monthlyLimit: 80000,
+          dailyLimit: 15000,
+          receiptRequiredThreshold: 1000,
+          requiresTravelRequestRef: false,
+          requiresPreApproval: false,
+          isActive: true,
+          allowAllowanceOverlap: true
+        },
+        {
+          categoryId: 'CAT-MED',
+          categoryName: 'Medical / Health',
+          code: 'MED',
+          description: 'Emergency medical expenses and occupational health reimbursement.',
+          perClaimLimit: 50000,
+          monthlyLimit: 100000,
+          dailyLimit: 20000,
+          receiptRequiredThreshold: 500,
+          requiresTravelRequestRef: false,
+          requiresPreApproval: false,
+          isActive: true,
+          allowAllowanceOverlap: true
+        },
+        {
+          categoryId: 'CAT-MISC',
+          categoryName: 'Office Miscellaneous',
+          code: 'MISC',
+          description: 'General office supplies, courier, emergency stationery and small sundries.',
+          perClaimLimit: 10000,
+          monthlyLimit: 30000,
+          dailyLimit: 5000,
+          receiptRequiredThreshold: 200,
+          requiresTravelRequestRef: false,
+          requiresPreApproval: false,
+          isActive: true,
+          allowAllowanceOverlap: true
+        }
+      ]
+      try {
+        await this._saveExpenseCategoriesSetting(defaultCategories)
+      } catch (_) {}
+      list = defaultCategories
     }
-    return settings.settingsJson.expenseCategories.map((c) => this._enrichCategory(c))
+    return list.map((c) => this._enrichCategory(c))
   }
 
   async _saveExpenseCategoriesSetting(updatedList) {

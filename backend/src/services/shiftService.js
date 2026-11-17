@@ -44,9 +44,27 @@ function enrichShift(shift) {
     else if (lname.includes('part-time') || lname.includes('part time')) derivedType = 'PART_TIME'
     else if (lname.includes('hourly')) derivedType = 'HOURLY'
   }
+
+  const rawDays = shift.workDaysJson || shift.workDays || shift.weeklyWorkingDays
+  const dayNameMap = {
+    'MONDAY': 'Monday',
+    'TUESDAY': 'Tuesday',
+    'WEDNESDAY': 'Wednesday',
+    'THURSDAY': 'Thursday',
+    'FRIDAY': 'Friday',
+    'SATURDAY': 'Saturday',
+    'SUNDAY': 'Sunday'
+  }
+  const weeklyWorkingDays = Array.isArray(rawDays) && rawDays.length > 0
+    ? rawDays.map((d) => dayNameMap[String(d).toUpperCase()] || d)
+    : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+
   return {
     ...shift,
     type: derivedType,
+    weeklyWorkingDays,
+    workDays: weeklyWorkingDays,
+    workDaysJson: Array.isArray(rawDays) ? rawDays : ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
     startTimeFormatted: format12Hour(shift.startTime),
     endTimeFormatted: format12Hour(shift.endTime),
     breakStartTimeFormatted: shift.breakStartTime ? format12Hour(shift.breakStartTime) : null,

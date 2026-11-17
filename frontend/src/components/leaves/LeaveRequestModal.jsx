@@ -86,13 +86,13 @@ export function LeaveRequestModal({
     return leavePolicyService.getAllLeaveTypes() || []
   }, [employeeId, dynamicTypes])
 
-  // Derive effective leave type - strictly real DB type, never hardcoded mock ID
+  // Derive effective leave type
   const effectiveLeaveTypeId = useMemo(() => {
-    if (leaveTypeId && eligibleTypes.some((t) => t.id === leaveTypeId)) {
+    if (leaveTypeId && eligibleTypes.some((t) => t.id === leaveTypeId || t.code === leaveTypeId)) {
       return leaveTypeId
     }
     const realType = eligibleTypes.find((t) => !t.id.startsWith('LT-'))
-    return realType ? realType.id : (eligibleTypes[0]?.id && !eligibleTypes[0].id.startsWith('LT-') ? eligibleTypes[0].id : '')
+    return realType ? realType.id : (eligibleTypes[0]?.id || '')
   }, [leaveTypeId, eligibleTypes])
 
   // Calculate real-time shift-aware working duration (Excludes weekly offs & holidays)
@@ -144,7 +144,7 @@ export function LeaveRequestModal({
     e.preventDefault()
     setError(null)
 
-    if (!effectiveLeaveTypeId || effectiveLeaveTypeId.startsWith('LT-')) {
+    if (!effectiveLeaveTypeId) {
       setError('Please select a valid Leave Type from the dropdown.')
       return
     }
@@ -157,9 +157,17 @@ export function LeaveRequestModal({
     setSubmitting(true)
 
     try {
+      let resolvedTypeId = effectiveLeaveTypeId
+      if (resolvedTypeId.startsWith('LT-')) {
+        const match = dynamicTypes.find(
+          (d) => d.code === selectedTypeObj?.code || d.name?.toLowerCase() === selectedTypeObj?.name?.toLowerCase()
+        )
+        if (match?.id) resolvedTypeId = match.id
+      }
+
       const payload = {
         employeeId,
-        leaveTypeId: effectiveLeaveTypeId,
+        leaveTypeId: resolvedTypeId,
         startDate,
         endDate: isHalfDay ? startDate : endDate,
         durationDays: requestedWorkingDays,

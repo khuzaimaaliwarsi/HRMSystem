@@ -18,11 +18,57 @@ export const leaveService = {
       where.isActive = filters.isActive === 'true' || filters.isActive === true
     }
 
-    return prisma.leaveType.findMany({
+    let types = await prisma.leaveType.findMany({
       where,
       orderBy: { code: 'asc' },
       include: { policies: { where: { isActive: true } } }
     })
+
+    if (!types || types.length === 0) {
+      const canonicalTypes = [
+        { code: 'ANNUAL', name: 'Annual Leave', defaultDaysPerYear: 14.0, isPaid: true, isEncashable: true, carryForwardLimit: 5.0, requiresAttachment: false },
+        { code: 'CASUAL', name: 'Casual Leave', defaultDaysPerYear: 10.0, isPaid: true, isEncashable: false, carryForwardLimit: 0, requiresAttachment: false },
+        { code: 'SICK', name: 'Sick Leave', defaultDaysPerYear: 8.0, isPaid: true, isEncashable: false, carryForwardLimit: 0, requiresAttachment: true },
+        { code: 'EMERGENCY', name: 'Emergency Leave', defaultDaysPerYear: 3.0, isPaid: true, isEncashable: false, carryForwardLimit: 0, requiresAttachment: false },
+        { code: 'UNPAID', name: 'Unpaid Leave (LWP)', defaultDaysPerYear: 30.0, isPaid: false, isEncashable: false, carryForwardLimit: 0, requiresAttachment: false }
+      ]
+
+      for (const t of canonicalTypes) {
+        try {
+          await prisma.leaveType.upsert({
+            where: { code: t.code },
+            create: {
+              code: t.code,
+              name: t.name,
+              defaultDaysPerYear: t.defaultDaysPerYear,
+              isPaid: t.isPaid,
+              isEncashable: t.isEncashable,
+              carryForwardLimit: t.carryForwardLimit,
+              requiresAttachment: t.requiresAttachment,
+              isActive: true,
+              policies: {
+                create: {
+                  policyName: `${t.name} Standard Corporate Policy`,
+                  annualApprovalThreshold: 2,
+                  maxConsecutiveDays: 14,
+                  effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+                  isActive: true
+                }
+              }
+            },
+            update: {}
+          })
+        } catch (_) {}
+      }
+
+      types = await prisma.leaveType.findMany({
+        where,
+        orderBy: { code: 'asc' },
+        include: { policies: { where: { isActive: true } } }
+      })
+    }
+
+    return types
   },
 
   async createLeaveType(data) {
@@ -134,22 +180,27 @@ export const leaveService = {
     })
 
     if (entitlements.length === 0 && emp) {
-      const activeTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
+      let activeTypes = await prisma.leaveType.findMany({ where: { isActive: true } })
+      if (activeTypes.length === 0) {
+        activeTypes = await this.getLeaveTypes({ isActive: true })
+      }
       for (const lt of activeTypes) {
         const defaultDays = parseFloat(lt.defaultDaysPerYear || 10)
-        const ent = await prisma.leaveEntitlement.create({
-          data: {
-            employeeId: realEmpId,
-            leaveTypeId: lt.id,
-            calendarYear: year,
-            allocatedDays: defaultDays,
-            utilizedDays: 0,
-            pendingDays: 0,
-            availableBalance: defaultDays
-          },
-          include: { leaveType: true }
-        })
-        entitlements.push(ent)
+        try {
+          const ent = await prisma.leaveEntitlement.create({
+            data: {
+              employeeId: realEmpId,
+              leaveTypeId: lt.id,
+              calendarYear: year,
+              allocatedDays: defaultDays,
+              utilizedDays: 0,
+              pendingDays: 0,
+              availableBalance: defaultDays
+            },
+            include: { leaveType: true }
+          })
+          entitlements.push(ent)
+        } catch (_) {}
       }
     }
 
@@ -271,7 +322,31 @@ export const leaveService = {
 
     let leaveType = await prisma.leaveType.findUnique({ where: { id: leaveTypeId } })
     if (!leaveType) {
-      leaveType = await prisma.leaveType.findFirst({ where: { code: leaveTypeId } })
+      const cleanCode = String(leaveTypeId).replace(/^LT-/, '').trim()
+      leaveType = await prisma.leaveType.findFirst({
+        where: {
+          OR: [
+            { code: leaveTypeId },
+            { code: cleanCode },
+            { code: cleanCode.toUpperCase() },
+            { name: { equals: leaveTypeId, mode: 'insensitive' } }
+          ]
+        }
+      })
+    }
+    if (!leaveType) {
+      await this.getLeaveTypes()
+      const cleanCode = String(leaveTypeId).replace(/^LT-/, '').trim()
+      leaveType = await prisma.leaveType.findFirst({
+        where: {
+          OR: [
+            { code: leaveTypeId },
+            { code: cleanCode },
+            { code: cleanCode.toUpperCase() },
+            { name: { equals: leaveTypeId, mode: 'insensitive' } }
+          ]
+        }
+      })
     }
     if (!leaveType) {
       const error = new Error(`Leave type '${leaveTypeId}' not found.`)

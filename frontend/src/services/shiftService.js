@@ -875,13 +875,16 @@ class ShiftService {
     const d = new Date(dateStr)
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const dayName = dayNames[d.getUTCDay()]
+    const dayUpper = dayName.toUpperCase()
 
-    if (shift && Array.isArray(shift.weeklyWorkingDays)) {
-      return !shift.weeklyWorkingDays.includes(dayName)
+    const rawDays = shift?.weeklyWorkingDays || shift?.workDaysJson || shift?.workDays
+    if (Array.isArray(rawDays) && rawDays.length > 0) {
+      const upperDays = rawDays.map((x) => String(x).toUpperCase())
+      return !upperDays.includes(dayUpper)
     }
 
     // Default: Saturday & Sunday are off
-    return dayName === 'Saturday' || dayName === 'Sunday'
+    return dayUpper === 'SATURDAY' || dayUpper === 'SUNDAY'
   }
 }
 

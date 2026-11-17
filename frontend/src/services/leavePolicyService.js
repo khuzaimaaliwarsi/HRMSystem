@@ -23,7 +23,7 @@ class LeavePolicyService {
         if (raw) storedTypes = JSON.parse(raw)
       }
     } catch (_) {}
-    this.leaveTypes = Array.isArray(storedTypes) && storedTypes.length > 0 ? storedTypes : (isTest ? [...LEAVE_TYPES] : [])
+    this.leaveTypes = Array.isArray(storedTypes) && storedTypes.length > 0 ? storedTypes : [...LEAVE_TYPES]
     this._loadConfiguredThreshold()
   }
 
@@ -548,8 +548,8 @@ class LeavePolicyService {
    * Reset to deterministic default policies
    */
   resetToDefaults() {
-    this.policies = isTest ? [...LEAVE_POLICIES] : []
-    this.leaveTypes = isTest ? [...LEAVE_TYPES] : []
+    this.policies = [...LEAVE_POLICIES]
+    this.leaveTypes = [...LEAVE_TYPES]
   }
 }
 

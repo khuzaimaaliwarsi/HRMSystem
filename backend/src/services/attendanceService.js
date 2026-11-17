@@ -442,8 +442,16 @@ export const attendanceService = {
       throw error
     }
 
+    let targetId = employeeId
+    try {
+      const emp = await prisma.employee.findFirst({
+        where: { OR: [{ id: employeeId }, { employeeCode: employeeId }] }
+      })
+      if (emp) targetId = emp.id
+    } catch (_) {}
+
     const where = {
-      employeeId,
+      employeeId: targetId,
       attendanceDate: {
         gte: new Date(startDate || '2000-01-01'),
         lte: new Date(endDate || '2099-12-31')

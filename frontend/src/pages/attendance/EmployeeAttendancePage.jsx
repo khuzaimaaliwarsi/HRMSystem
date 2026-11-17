@@ -242,8 +242,8 @@ export function EmployeeAttendancePage() {
                         <div>{r.shiftName}</div>
                         <span className="text-[10px] text-slate-400 font-mono">{r.workArrangement}</span>
                       </td>
-                      <td className="p-3 font-mono font-bold text-slate-700">{r.checkInTime ? formatTimeTo12Hour(r.checkInTime) : '— : —'}</td>
-                      <td className="p-3 font-mono font-bold text-slate-700">{r.checkOutTime ? formatTimeTo12Hour(r.checkOutTime) : '— : —'}</td>
+                      <td className="p-3 font-mono font-bold text-slate-700">{r.checkInTime ? formatTimeTo12Hour(r.checkInTime) : ((r.checkIn && r.checkIn !== '--:--') ? formatTimeTo12Hour(r.checkIn) : '— : —')}</td>
+                      <td className="p-3 font-mono font-bold text-slate-700">{r.checkOutTime ? formatTimeTo12Hour(r.checkOutTime) : ((r.checkOut && r.checkOut !== '--:--') ? formatTimeTo12Hour(r.checkOut) : '— : —')}</td>
                       <td className="p-3 text-right font-mono font-bold text-hrms-primary">
                         {r.workedHours > 0 ? `${r.workedHours}h` : '0.0h'}
                       </td>

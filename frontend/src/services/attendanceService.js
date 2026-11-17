@@ -749,7 +749,10 @@ class AttendanceService {
   getEmployeeTodayRecord(employeeId, targetDate = null) {
     const date = targetDate || getKarachiToday()
     const list = this._getItem(STORAGE_KEYS.RECORDS, [])
-    return list.find((r) => r.employeeId === employeeId && r.date === date) || null
+    return list.find((r) =>
+      (r.employeeId === employeeId || r.employeeCode === employeeId || r.employeeCuid === employeeId) &&
+      (r.date === date || r.attendanceDate === date)
+    ) || null
   }
 
   // ==========================================

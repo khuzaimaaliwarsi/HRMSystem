@@ -128,8 +128,11 @@ class ExpenseService {
   // =========================================================================
 
   getExpenseCategories(filterActive = false) {
-    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
-    const categories = this._getItem(STORAGE_KEYS.CATEGORIES, isTest ? INITIAL_EXPENSE_CATEGORIES : [])
+    let categories = this._getItem(STORAGE_KEYS.CATEGORIES, [])
+    if (!Array.isArray(categories) || categories.length === 0) {
+      categories = JSON.parse(JSON.stringify(INITIAL_EXPENSE_CATEGORIES))
+      this._setItem(STORAGE_KEYS.CATEGORIES, categories)
+    }
     if (filterActive) {
       return categories.filter((c) => c.isActive)
     }
@@ -1059,7 +1062,10 @@ class ExpenseService {
     ])
 
     if (catRes.status === 'fulfilled') {
-      this._setItem(STORAGE_KEYS.CATEGORIES, this._unwrapList(catRes.value).map((c) => this._normalizeCategory(c)))
+      const unwrapped = this._unwrapList(catRes.value)
+      if (unwrapped.length > 0) {
+        this._setItem(STORAGE_KEYS.CATEGORIES, unwrapped.map((c) => this._normalizeCategory(c)))
+      }
     }
     if (polRes.status === 'fulfilled' && polRes.value) {
       const pol = this._unwrapItem(polRes.value)

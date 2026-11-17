@@ -225,8 +225,8 @@ export function DailyAttendanceRegisterTab({
                     <td className="p-3">
                       <div className="font-semibold text-slate-800 text-[11px]">
                         {(() => {
-                          const effectiveShift = shiftService.resolveEmployeeShiftForDate(r.employeeId, r.date)
-                          return effectiveShift?.name || r.shiftName || 'General Corporate Day Shift'
+                          const effectiveShift = shiftService.resolveEmployeeShiftForDate(r.employeeId || r.employeeCuid || r.employeeCode, r.date)
+                          return effectiveShift?.name || r.shift?.name || r.shiftName || 'General Corporate Day Shift'
                         })()}
                       </div>
                       <span className="inline-block text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
@@ -234,10 +234,14 @@ export function DailyAttendanceRegisterTab({
                       </span>
                     </td>
                     <td className="p-3 font-mono font-bold text-slate-700">
-                      {r.checkInTime ? formatTimeTo12Hour(r.checkInTime) : '— : —'}
+                      {r.checkInTime
+                        ? formatTimeTo12Hour(r.checkInTime)
+                        : ((r.checkIn && r.checkIn !== '--:--') ? formatTimeTo12Hour(r.checkIn) : '— : —')}
                     </td>
                     <td className="p-3 font-mono font-bold text-slate-700">
-                      {r.checkOutTime ? formatTimeTo12Hour(r.checkOutTime) : '— : —'}
+                      {r.checkOutTime
+                        ? formatTimeTo12Hour(r.checkOutTime)
+                        : ((r.checkOut && r.checkOut !== '--:--') ? formatTimeTo12Hour(r.checkOut) : '— : —')}
                     </td>
                     <td className="p-3 text-right font-mono font-bold text-hrms-primary">
                       {r.workedHours > 0 ? `${r.workedHours}h` : '0.0h'}

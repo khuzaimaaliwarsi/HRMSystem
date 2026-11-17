@@ -34,6 +34,7 @@ import { hrLettersService } from './hrLettersService.js'
 import { helpDeskService } from './helpDeskService.js'
 import { travelService } from './travelService.js'
 import { dataPurgeService } from './dataPurgeService.js'
+import { normalizeTimeTo24Hour, formatTimeTo12Hour, getKarachiToday } from '../lib/dateUtils.js'
 
 // Track sync status
 let isSyncing = false
@@ -226,7 +227,12 @@ export async function syncAttendanceAndShifts() {
         paidBreak: Boolean(s.isBreakPaid),
         expectedWorkingHours: s.fullDayTargetMinutes ? s.fullDayTargetMinutes / 60 : (s.expectedWorkingHours || 8.0),
         gracePeriodMinutes: Number(s.graceMinutesIn ?? s.gracePeriodMinutes ?? 15),
-        weeklyWorkingDays: Array.isArray(s.workDaysJson) ? s.workDaysJson : (Array.isArray(s.workDays) ? s.workDays : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
+        weeklyWorkingDays: (() => {
+          const raw = Array.isArray(s.weeklyWorkingDays) ? s.weeklyWorkingDays : (Array.isArray(s.workDaysJson) ? s.workDaysJson : (Array.isArray(s.workDays) ? s.workDays : []))
+          if (raw.length === 0) return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+          const map = { MONDAY: 'Monday', TUESDAY: 'Tuesday', WEDNESDAY: 'Wednesday', THURSDAY: 'Thursday', FRIDAY: 'Friday', SATURDAY: 'Saturday', SUNDAY: 'Sunday' }
+          return raw.map((d) => map[String(d).toUpperCase()] || d)
+        })(),
         applicableWorkArrangements: ['Office', 'Hybrid', 'WFH'],
         status: s.isActive ? 'Active' : 'Inactive',
         isDefault: Boolean(s.isDefault),
@@ -274,9 +280,66 @@ export async function syncAttendanceAndShifts() {
       shiftService._notify()
     }
 
-    const regData = attRes.status === 'fulfilled' ? (Array.isArray(attRes.value) ? attRes.value : (attRes.value?.register || [])) : []
-    if (regData.length > 0) {
-      attendanceService.memoryStorage['isysware_hrms_f04_attendance_records_v1'] = regData
+    const regPayload = attRes.status === 'fulfilled' ? attRes.value : null
+    const regDate = regPayload?.date || (typeof getKarachiToday === 'function' ? getKarachiToday() : new Date().toISOString().slice(0, 10))
+    const rawRegList = Array.isArray(regPayload) ? regPayload : (regPayload?.register || [])
+    if (rawRegList.length > 0) {
+      const mappedRecords = rawRegList.map((r) => {
+        const empCode = r.employeeCode || r.employeeId
+        const checkInTime = (r.checkIn && r.checkIn !== '--:--')
+          ? normalizeTimeTo24Hour(r.checkIn)
+          : (r.checkInTime || null)
+        const checkOutTime = (r.checkOut && r.checkOut !== '--:--')
+          ? normalizeTimeTo24Hour(r.checkOut)
+          : (r.checkOutTime || null)
+        const isPresent = Boolean(checkInTime)
+        const status = isPresent ? 'Present' : (r.status === 'ABSENT' ? 'Absent' : (r.status === 'HALF_DAY' ? 'Half Day' : (r.status || 'Scheduled')))
+        return {
+          id: r.attendanceRecordId || r.id || `ATT-${empCode}-${regDate}`,
+          cuid: r.attendanceRecordId || r.id,
+          date: r.date || regDate,
+          attendanceDate: r.date || regDate,
+          employeeId: empCode,
+          employeeCode: empCode,
+          employeeCuid: r.employeeId,
+          employeeName: r.name || empCode,
+          department: r.department || '',
+          designation: r.designation || '',
+          checkIn: r.checkIn && r.checkIn !== '--:--' ? r.checkIn : (checkInTime ? formatTimeTo12Hour(checkInTime) : null),
+          checkOut: r.checkOut && r.checkOut !== '--:--' ? r.checkOut : (checkOutTime ? formatTimeTo12Hour(checkOutTime) : null),
+          checkInTime,
+          checkOutTime,
+          status,
+          primaryClassification: status,
+          shiftId: r.shift?.shiftCode || r.shift?.id || 'SHF-GEN',
+          shiftName: r.shift?.name || 'Standard Day Shift',
+          expectedHours: parseFloat(r.shift?.workHours) || 8.0,
+          workedHours: parseFloat(r.workedHours) || (r.workedMinutes ? r.workedMinutes / 60 : 0.0),
+          workedMinutes: r.workedMinutes || 0,
+          lateMinutes: r.lateMinutes || 0,
+          earlyExitMinutes: r.earlyExitMinutes || 0,
+          hasPendingCorrection: Boolean(r.hasPendingCorrection)
+        }
+      })
+      const currentList = attendanceService.getAttendanceRecords() || []
+      const merged = [...currentList]
+      mappedRecords.forEach((newRec) => {
+        const idx = merged.findIndex(
+          (m) =>
+            (m.employeeId === newRec.employeeId || m.employeeCuid === newRec.employeeCuid || m.employeeCode === newRec.employeeCode) &&
+            (m.date === newRec.date || m.attendanceDate === newRec.date)
+        )
+        if (idx !== -1) {
+          merged[idx] = { ...merged[idx], ...newRec }
+        } else {
+          merged.unshift(newRec)
+        }
+      })
+      attendanceService.memoryStorage['isysware_hrms_f04_attendance_records_v1'] = merged
+      if (typeof attendanceService._setItem === 'function') {
+        attendanceService._setItem('isysware_hrms_f04_attendance_records_v1', merged)
+      }
+      attendanceService._notify()
     }
 
     if (corrRes.status === 'fulfilled' && Array.isArray(corrRes.value)) {

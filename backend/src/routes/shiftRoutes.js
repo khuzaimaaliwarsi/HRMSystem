@@ -152,18 +152,7 @@ router.post('/assignments', requireRoles('SUPER_ADMIN', 'HR_ADMIN'), async (req,
   }
 })
 
-/**
- * PATCH /api/v1/shifts/assignments/:id
- * Update shift assignment effective dates and properties
- */
-router.patch('/assignments/:id', requireRoles('SUPER_ADMIN', 'HR_ADMIN'), async (req, res, next) => {
-  try {
-    const updated = await shiftService.updateShiftAssignment(req.params.id, req.body, req.user?.id)
-    return sendSuccess(res, updated, { message: 'Shift assignment updated successfully' }, 200)
-  } catch (err) {
-    next(err)
-  }
-})
+
 
 /**
  * PATCH /api/v1/shifts/assignments/:id
