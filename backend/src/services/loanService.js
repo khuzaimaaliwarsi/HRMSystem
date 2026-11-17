@@ -410,13 +410,6 @@ export const loanService = {
           status: newBalance <= 0 ? 'REPAID' : loan.status
         }
       })
-        where: { id: loanId },
-        data: {
-          remainingBalance: new Prisma.Decimal(newBalance.toFixed(2)),
-          totalRepaidAmount: new Prisma.Decimal(newTotalRepaid.toFixed(2)),
-          status: newBalance <= 0 ? 'REPAID' : loan.status
-        }
-      })
 
       return repayment
     })
