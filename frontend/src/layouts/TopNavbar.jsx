@@ -16,12 +16,10 @@ export function TopNavbar({ onOpenMobile }) {
 
   const [roleMenuOpen, setRoleMenuOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
-  const [notifMenuOpen, setNotifMenuOpen] = useState(false)
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false)
 
   const roleMenuRef = useRef(null)
   const profileMenuRef = useRef(null)
-  const notifMenuRef = useRef(null)
 
   // Dynamic header resolution based on current path and search params
   const headerInfo = useMemo(() => {
@@ -87,9 +85,6 @@ export function TopNavbar({ onOpenMobile }) {
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
         setProfileMenuOpen(false)
       }
-      if (notifMenuRef.current && !notifMenuRef.current.contains(e.target)) {
-        setNotifMenuOpen(false)
-      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -101,13 +96,6 @@ export function TopNavbar({ onOpenMobile }) {
     notify.info('You have been signed out.')
     navigate('/login')
   }
-
-  // Simulated notifications for demo purposes
-  const demoNotifications = [
-    { id: 1, title: 'Shift Policy Effective Notice', desc: 'New winter shift hours active from 1st Nov.', time: '10m ago', unread: true },
-    { id: 2, title: 'Scheduled Reminders Engine', desc: 'Probation review scheduled for EMP-004 in 14 days.', time: '1h ago', unread: true },
-    { id: 3, title: 'Security Audit Notice', desc: 'Zero graph reporting policy enforced across all exports.', time: '1d ago', unread: false }
-  ]
 
   // Permitted portals for current authenticated user
   const myPortals = useMemo(() => {
@@ -236,53 +224,8 @@ export function TopNavbar({ onOpenMobile }) {
           />
         </div>
 
-        {/* Right Section: Notification Bell, Role Switcher, User Menu */}
+        {/* Right Section: Role Switcher, User Menu */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Notification Bell matching Screenshot 1 position */}
-          <div className="relative" ref={notifMenuRef}>
-            <button
-              type="button"
-              onClick={() => setNotifMenuOpen(!notifMenuOpen)}
-              className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors relative focus:outline-none"
-              aria-label="Notifications"
-            >
-              <AppIcon name="alerts" className="w-4 h-4 text-slate-600" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-white" />
-            </button>
-
-            {notifMenuOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-hrms-dropdown border border-hrms-border overflow-hidden z-50 text-left">
-                <div className="px-4 py-3 bg-hrms-canvas border-b border-hrms-border flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-hrms-primary uppercase tracking-wider">
-                    Scheduled Alerts & Updates
-                  </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">
-                    2 New
-                  </span>
-                </div>
-                <div className="divide-y divide-hrms-border/60 max-h-72 overflow-y-auto">
-                  {demoNotifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={cn("p-3 hover:bg-slate-50 transition-colors", notif.unread && "bg-blue-50/30")}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-hrms-primary">{notif.title}</span>
-                        <span className="text-[10px] text-hrms-subtle">{notif.time}</span>
-                      </div>
-                      <p className="text-xs text-hrms-muted leading-relaxed">{notif.desc}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-2 bg-white border-t border-hrms-border text-center">
-                  <span className="text-[11px] text-hrms-muted font-medium">
-                    Scheduled Reminders Engine (Batch F13)
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Authorized Portal Switcher (Only if user has multiple authorized portals, e.g. Admin + Self-Service) */}
           <div className="relative" ref={roleMenuRef}>
             {myPortals.length > 1 ? (

@@ -245,29 +245,29 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 items-start">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700">
+              <div className="flex items-center justify-between h-5 mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 leading-none">
                   Facility / Category <span className="text-rose-500">*</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setIsAddingCustomType(!isAddingCustomType)}
-                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer leading-none"
                 >
                   {isAddingCustomType ? '✕ Cancel' : '+ Add Custom Category'}
                 </button>
               </div>
 
               {isAddingCustomType ? (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 h-10">
                   <input
                     type="text"
                     value={customTypeName}
                     onChange={(e) => setCustomTypeName(e.target.value)}
                     placeholder="e.g. Vehicle Loan, Home Renovation..."
-                    className="flex-1 text-xs px-2.5 py-1.5 border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex-1 h-10 text-xs px-2.5 py-2 border border-blue-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 box-border"
                     autoFocus
                   />
                   <button
@@ -283,7 +283,7 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
                         setCustomTypeName('');
                       }
                     }}
-                    className="px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition cursor-pointer"
+                    className="h-10 px-3 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition cursor-pointer"
                   >
                     Add
                   </button>
@@ -302,7 +302,7 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
                       });
                     }
                   }}
-                  className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600 cursor-pointer"
+                  className="w-full h-10 text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600 cursor-pointer box-border"
                 >
                   <option value="PERSONAL_LOAN">Personal Loan</option>
                   <option value="COMPANY_LOAN">Company Loan</option>
@@ -318,7 +318,9 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Repayment Tenure (Months)</label>
+              <div className="flex items-center h-5 mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 leading-none">Repayment Tenure (Months)</label>
+              </div>
               <input
                 type="number"
                 min="1"
@@ -328,7 +330,7 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
                   ...formData,
                   tenureMonths: e.target.value
                 })}
-                className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600"
+                className="w-full h-10 text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-600 box-border"
               />
             </div>
           </div>
