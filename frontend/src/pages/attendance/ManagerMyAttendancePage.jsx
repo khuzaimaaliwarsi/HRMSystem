@@ -276,7 +276,7 @@ export function ManagerMyAttendancePage({ isEmbedded = false }) {
                       <td className="p-3 font-mono font-bold text-slate-800">{r.date}</td>
                       <td className="p-3 text-slate-600 font-medium">
                         <div>{r.shiftName}</div>
-                        <span className="text-[10px] text-slate-400 font-mono">{r.workArrangement}</span>
+                        <span className="text-[10px] text-slate-500 font-mono font-semibold">{r.workArrangement === 'REMOTE_WFH' ? 'WFH' : (r.workArrangement === 'FIELD_DUTY' ? 'Field Duty' : (r.workArrangement || 'Office'))}</span>
                       </td>
                       <td className="p-3 font-mono font-bold text-slate-700">{r.checkInTime ? formatTimeTo12Hour(r.checkInTime) : '— : —'}</td>
                       <td className="p-3 font-mono font-bold text-slate-700">{r.checkOutTime ? formatTimeTo12Hour(r.checkOutTime) : '— : —'}</td>

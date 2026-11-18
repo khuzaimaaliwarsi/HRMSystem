@@ -76,6 +76,42 @@ export const attendanceService = {
 
     const initialStatus = metrics.lateMinutes > 0 ? 'PRESENT' : 'PRESENT'
 
+    // Authoritative work arrangement resolution: Auto-detect approved WFH or Field Duty
+    let effectiveArrangement = 'OFFICE'
+    const requestedArr = reqMeta.workArrangement ? String(reqMeta.workArrangement).trim().toUpperCase() : null
+
+    const startOfDay = new Date(businessDateStr + 'T00:00:00.000Z')
+    const endOfDay = new Date(businessDateStr + 'T23:59:59.999Z')
+
+    const [approvedWfh, approvedFieldDuty] = await Promise.all([
+      prisma.wfhRequest.findFirst({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          startDate: { lte: endOfDay },
+          endDate: { gte: startOfDay }
+        }
+      }),
+      prisma.fieldDutyRequest.findFirst({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          dutyDate: { gte: startOfDay, lte: endOfDay }
+        }
+      })
+    ])
+
+    if (approvedWfh) {
+      effectiveArrangement = 'REMOTE_WFH'
+    } else if (approvedFieldDuty) {
+      effectiveArrangement = 'FIELD_DUTY'
+    } else if (requestedArr) {
+      if (requestedArr.includes('WFH') || requestedArr.includes('REMOTE')) effectiveArrangement = 'REMOTE_WFH'
+      else if (requestedArr.includes('FIELD') || requestedArr.includes('CLIENT')) effectiveArrangement = 'FIELD_DUTY'
+      else if (requestedArr.includes('HYBRID')) effectiveArrangement = 'HYBRID'
+      else effectiveArrangement = 'OFFICE'
+    }
+
     // 4. Create or update record in a transaction
     const result = await prisma.$transaction(async (tx) => {
       let attRecord = record
@@ -91,7 +127,7 @@ export const attendanceService = {
             firstCheckIn: punchDateTime,
             lateMinutes: metrics.lateMinutes,
             status: initialStatus,
-            workArrangement: reqMeta.workArrangement || 'OFFICE',
+            workArrangement: effectiveArrangement,
             remarks: reqMeta.remarks || null
           }
         })
@@ -106,7 +142,7 @@ export const attendanceService = {
             firstCheckIn: punchDateTime,
             lateMinutes: metrics.lateMinutes,
             status: initialStatus,
-            workArrangement: reqMeta.workArrangement || attRecord.workArrangement
+            workArrangement: effectiveArrangement
           }
         })
       }
@@ -190,6 +226,32 @@ export const attendanceService = {
       shift
     })
 
+    // Authoritative check: ensure workArrangement matches approved WFH or Field Duty
+    const startOfDay = new Date(businessDateStr + 'T00:00:00.000Z')
+    const endOfDay = new Date(businessDateStr + 'T23:59:59.999Z')
+
+    const [approvedWfh, approvedFieldDuty] = await Promise.all([
+      prisma.wfhRequest.findFirst({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          startDate: { lte: endOfDay },
+          endDate: { gte: startOfDay }
+        }
+      }),
+      prisma.fieldDutyRequest.findFirst({
+        where: {
+          employeeId,
+          status: 'APPROVED',
+          dutyDate: { gte: startOfDay, lte: endOfDay }
+        }
+      })
+    ])
+
+    let effectiveArrangement = record.workArrangement
+    if (approvedWfh) effectiveArrangement = 'REMOTE_WFH'
+    else if (approvedFieldDuty) effectiveArrangement = 'FIELD_DUTY'
+
     const result = await prisma.$transaction(async (tx) => {
       const updatedRecord = await tx.attendanceRecord.update({
         where: { id: record.id },
@@ -200,6 +262,7 @@ export const attendanceService = {
           actualWorkMinutes: metrics.actualWorkMinutes,
           earlyExitMinutes: metrics.earlyExitMinutes,
           lateMinutes: metrics.lateMinutes,
+          workArrangement: effectiveArrangement,
           status: metrics.actualWorkMinutes >= (shift.halfDayThresholdMinutes || 240) ? 'PRESENT' : 'HALF_DAY'
         }
       })
@@ -281,29 +344,32 @@ export const attendanceService = {
 
     const recordsByEmpId = new Map(attendanceRecords.map((r) => [r.employeeId, r]))
 
+    const startOfDay = new Date(businessDateStr + 'T00:00:00.000Z')
+    const endOfDay = new Date(businessDateStr + 'T23:59:59.999Z')
+
     // Also fetch approved WFH, Field Duty, and Leave for employees on this date
     const [wfhApproved, fieldDutyApproved, leaveApproved] = await Promise.all([
       prisma.wfhRequest.findMany({
         where: {
           employeeId: { in: employees.map((e) => e.id) },
           status: 'APPROVED',
-          startDate: { lte: targetDate },
-          endDate: { gte: targetDate }
+          startDate: { lte: endOfDay },
+          endDate: { gte: startOfDay }
         }
       }),
       prisma.fieldDutyRequest.findMany({
         where: {
           employeeId: { in: employees.map((e) => e.id) },
           status: 'APPROVED',
-          dutyDate: targetDate
+          dutyDate: { gte: startOfDay, lte: endOfDay }
         }
       }),
       prisma.leaveRequest.findMany({
         where: {
           employeeId: { in: employees.map((e) => e.id) },
           status: 'APPROVED',
-          startDate: { lte: targetDate },
-          endDate: { gte: targetDate }
+          startDate: { lte: endOfDay },
+          endDate: { gte: startOfDay }
         },
         include: { leaveType: true }
       })
@@ -336,9 +402,12 @@ export const attendanceService = {
         let earlyExitMin = 0
         let hasPendingCorrection = false
 
+        const isApprovedWfh = wfhEmpIds.has(emp.id)
+        const isApprovedFieldDuty = fieldDutyEmpIds.has(emp.id)
+        const isApprovedLeave = leaveByEmpId.has(emp.id)
+
         if (existingRecord) {
           rowStatus = existingRecord.status
-          workArrangement = existingRecord.workArrangement
           workedMinutes = existingRecord.actualWorkMinutes
           lateMin = existingRecord.lateMinutes
           earlyExitMin = existingRecord.earlyExitMinutes
@@ -352,14 +421,37 @@ export const attendanceService = {
             hasPendingCorrection = true
             pendingCorrectionsCount += existingRecord.corrections.length
           }
+
+          // Authoritative Work Arrangement resolution for existing record:
+          // Approved WFH / Field Duty overrides default 'OFFICE'
+          if (isApprovedWfh) {
+            workArrangement = 'WFH'
+            if (existingRecord.workArrangement !== 'REMOTE_WFH') {
+              prisma.attendanceRecord.update({
+                where: { id: existingRecord.id },
+                data: { workArrangement: 'REMOTE_WFH' }
+              }).catch(() => {})
+            }
+          } else if (isApprovedFieldDuty) {
+            workArrangement = 'FIELD_DUTY'
+            if (existingRecord.workArrangement !== 'FIELD_DUTY') {
+              prisma.attendanceRecord.update({
+                where: { id: existingRecord.id },
+                data: { workArrangement: 'FIELD_DUTY' }
+              }).catch(() => {})
+            }
+          } else {
+            const rawArr = existingRecord.workArrangement
+            workArrangement = (rawArr === 'REMOTE_WFH' || rawArr === 'WFH') ? 'WFH' : (rawArr || 'OFFICE')
+          }
         } else {
           // Check approved leaves / WFH / Field Duty
-          if (leaveByEmpId.has(emp.id)) {
+          if (isApprovedLeave) {
             rowStatus = 'ON_LEAVE'
-          } else if (wfhEmpIds.has(emp.id)) {
+          } else if (isApprovedWfh) {
             rowStatus = 'WFH'
             workArrangement = 'WFH'
-          } else if (fieldDutyEmpIds.has(emp.id)) {
+          } else if (isApprovedFieldDuty) {
             rowStatus = 'FIELD_DUTY'
             workArrangement = 'FIELD_DUTY'
           } else if (isFutureDate) {
@@ -370,10 +462,17 @@ export const attendanceService = {
         }
 
         // Aggregate statistics
-        if (rowStatus === 'PRESENT' || rowStatus === 'HALF_DAY') presentCount++
-        else if (rowStatus === 'WFH') wfhCount++
-        else if (rowStatus === 'FIELD_DUTY') fieldDutyCount++
-        else if (rowStatus === 'ABSENT') absentCount++
+        if (rowStatus === 'PRESENT' || rowStatus === 'HALF_DAY') {
+          if (workArrangement === 'WFH') wfhCount++
+          else if (workArrangement === 'FIELD_DUTY') fieldDutyCount++
+          else presentCount++
+        } else if (rowStatus === 'WFH' || workArrangement === 'WFH') {
+          wfhCount++
+        } else if (rowStatus === 'FIELD_DUTY' || workArrangement === 'FIELD_DUTY') {
+          fieldDutyCount++
+        } else if (rowStatus === 'ABSENT') {
+          absentCount++
+        }
 
         if (lateMin > 0) lateCount++
 
@@ -514,25 +613,56 @@ export const attendanceService = {
       }
     }
 
-    const records = await prisma.attendanceRecord.findMany({
-      where,
-      orderBy: { attendanceDate: 'desc' },
-      include: {
-        shift: true,
-        punches: { orderBy: { punchTime: 'asc' } },
-        corrections: true
+    const startRange = new Date(startDate || '2000-01-01')
+    const endRange = new Date(endDate || '2099-12-31')
+
+    const [records, wfhApproved, fieldDutyApproved] = await Promise.all([
+      prisma.attendanceRecord.findMany({
+        where,
+        orderBy: { attendanceDate: 'desc' },
+        include: {
+          shift: true,
+          punches: { orderBy: { punchTime: 'asc' } },
+          corrections: true
+        }
+      }),
+      prisma.wfhRequest.findMany({
+        where: {
+          employeeId: targetId,
+          status: 'APPROVED',
+          startDate: { lte: endRange },
+          endDate: { gte: startRange }
+        }
+      }),
+      prisma.fieldDutyRequest.findMany({
+        where: {
+          employeeId: targetId,
+          status: 'APPROVED',
+          dutyDate: { gte: startRange, lte: endRange }
+        }
+      })
+    ])
+
+    const wfhDates = new Set(wfhApproved.map(w => w.startDate.toISOString().slice(0, 10)))
+    const fieldDutyDates = new Set(fieldDutyApproved.map(f => f.dutyDate.toISOString().slice(0, 10)))
+
+    return records.map((r) => {
+      const recDateStr = r.attendanceDate ? r.attendanceDate.toISOString().slice(0, 10) : ''
+      let finalArrangement = (r.workArrangement === 'REMOTE_WFH' || r.workArrangement === 'WFH') ? 'WFH' : (r.workArrangement === 'FIELD_DUTY' ? 'FIELD_DUTY' : (r.workArrangement || 'OFFICE'))
+      if (wfhDates.has(recDateStr)) finalArrangement = 'WFH'
+      else if (fieldDutyDates.has(recDateStr)) finalArrangement = 'FIELD_DUTY'
+
+      return {
+        ...r,
+        workArrangement: finalArrangement,
+        firstCheckInFormatted: r.firstCheckIn ? format12Hour(getKarachiTime(r.firstCheckIn)) : '--:--',
+        lastCheckOutFormatted: r.lastCheckOut ? format12Hour(getKarachiTime(r.lastCheckOut)) : '--:--',
+        punches: r.punches.map((p) => ({
+          ...p,
+          punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime))
+        }))
       }
     })
-
-    return records.map((r) => ({
-      ...r,
-      firstCheckInFormatted: r.firstCheckIn ? format12Hour(getKarachiTime(r.firstCheckIn)) : '--:--',
-      lastCheckOutFormatted: r.lastCheckOut ? format12Hour(getKarachiTime(r.lastCheckOut)) : '--:--',
-      punches: r.punches.map((p) => ({
-        ...p,
-        punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime))
-      }))
-    }))
   },
 
   /**

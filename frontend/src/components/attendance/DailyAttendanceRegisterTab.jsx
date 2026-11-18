@@ -89,8 +89,13 @@ export function DailyAttendanceRegisterTab({
     if (departmentFilter !== 'all' && r.departmentId !== departmentFilter) return false
     if (shiftFilter !== 'all' && r.shiftId !== shiftFilter) return false
     if (statusFilter !== 'all') {
-      const matchStatus = r.status?.toLowerCase() === statusFilter.toLowerCase() ||
-        r.primaryClassification?.toLowerCase() === statusFilter.toLowerCase()
+      const sf = statusFilter.toLowerCase()
+      const rStatus = (r.status || '').toLowerCase()
+      const rClass = (r.primaryClassification || '').toLowerCase()
+      const rArr = (r.workArrangement || '').toLowerCase()
+      const matchStatus = rStatus === sf || rClass === sf ||
+        (sf === 'wfh' && (rArr === 'wfh' || rArr === 'remote_wfh' || rStatus === 'wfh')) ||
+        (sf === 'field duty' && (rArr === 'field duty' || rArr === 'field_duty' || rStatus === 'field_duty'))
       if (!matchStatus) return false
     }
     if (searchQuery.trim()) {
@@ -285,9 +290,22 @@ export function DailyAttendanceRegisterTab({
                           return effectiveShift?.name || r.shift?.name || r.shiftName || 'General Corporate Day Shift'
                         })()}
                       </div>
-                      <span className="inline-block text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                        {r.workArrangement}
-                      </span>
+                      {(() => {
+                        const arr = r.workArrangement === 'REMOTE_WFH' ? 'WFH' : (r.workArrangement === 'FIELD_DUTY' ? 'Field Duty' : (r.workArrangement || 'Office'))
+                        const isWfh = arr === 'WFH'
+                        const isFd = arr === 'Field Duty'
+                        return (
+                          <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border font-semibold ${
+                            isWfh
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : isFd
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>
+                            {arr}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="p-3 font-mono font-bold text-slate-700">
                       {r.checkInTime
@@ -384,7 +402,9 @@ export function DailyAttendanceRegisterTab({
               </div>
               <div>
                 <span className="text-slate-500 text-[11px]">Work Arrangement:</span>
-                <div className="font-bold text-slate-800">{selectedRecordForDetail.workArrangement}</div>
+                <div className="font-bold text-slate-800">
+                  {selectedRecordForDetail.workArrangement === 'REMOTE_WFH' ? 'WFH' : (selectedRecordForDetail.workArrangement === 'FIELD_DUTY' ? 'Field Duty' : (selectedRecordForDetail.workArrangement || 'Office'))}
+                </div>
               </div>
               <div>
                 <span className="text-slate-500 text-[11px]">Check-In / Out:</span>

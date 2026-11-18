@@ -1428,7 +1428,9 @@ class AttendanceService {
       const { apiClient } = await import('./apiClient.js')
       await apiClient.post('/attendance/check-in', {
         employeeId,
-        timestamp: data.timestamp || new Date().toISOString()
+        timestamp: data.timestamp || new Date().toISOString(),
+        workArrangement: data.workArrangement || 'Office',
+        notes: data.notes
       })
     }
     return this.checkIn ? this.checkIn(employeeId, data) : null

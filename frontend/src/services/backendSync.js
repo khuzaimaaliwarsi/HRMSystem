@@ -320,6 +320,30 @@ export async function syncAttendanceAndShifts() {
           }
         }
 
+        const rawArrangement = r.workArrangement
+        let mappedArrangement = (rawArrangement === 'REMOTE_WFH' || rawArrangement === 'WFH')
+          ? 'WFH'
+          : (rawArrangement === 'FIELD_DUTY' ? 'Field Duty' : (rawArrangement || 'Office'))
+
+        // Fallback check against local WFH / Field Duty requests
+        if (mappedArrangement === 'Office') {
+          const wfhList = attendanceService.getWfhRequests() || []
+          const isWfh = wfhList.some(w =>
+            (w.employeeId === empCode || w.employeeId === r.employeeId) &&
+            (w.status === 'Approved' || w.status === 'APPROVED') &&
+            (w.requestedDate === regDate || (w.startDate && w.startDate.slice(0, 10) <= regDate && w.endDate && w.endDate.slice(0, 10) >= regDate))
+          )
+          if (isWfh) mappedArrangement = 'WFH'
+
+          const fdList = attendanceService.getFieldDutyRequests() || []
+          const isFd = fdList.some(f =>
+            (f.employeeId === empCode || f.employeeId === r.employeeId) &&
+            (f.status === 'Approved' || f.status === 'APPROVED') &&
+            (f.visitDate === regDate || (f.dutyDate && f.dutyDate.slice(0, 10) === regDate))
+          )
+          if (isFd) mappedArrangement = 'Field Duty'
+        }
+
         return {
           id: r.attendanceRecordId || r.id || `ATT-${empCode}-${regDate}`,
           cuid: r.attendanceRecordId || r.id,
@@ -331,6 +355,7 @@ export async function syncAttendanceAndShifts() {
           employeeName: r.name || empCode,
           department: r.department || '',
           designation: r.designation || '',
+          workArrangement: mappedArrangement,
           checkIn: r.checkIn && r.checkIn !== '--:--' ? r.checkIn : (checkInTime ? formatTimeTo12Hour(checkInTime) : null),
           checkOut: r.checkOut && r.checkOut !== '--:--' ? r.checkOut : (checkOutTime ? formatTimeTo12Hour(checkOutTime) : null),
           checkInTime,

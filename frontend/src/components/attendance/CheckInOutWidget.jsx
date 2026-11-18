@@ -14,12 +14,45 @@ export function CheckInOutWidget({
   onCheckOut
 }) {
   const [currentTime, setCurrentTime] = useState(() => getKarachiTimeString())
-  const [workArrangement, setWorkArrangement] = useState(currentRecord?.workArrangement || 'Office')
+  const [workArrangement, setWorkArrangement] = useState(() => {
+    if (currentRecord?.workArrangement) {
+      return (currentRecord.workArrangement === 'REMOTE_WFH' || currentRecord.workArrangement === 'WFH') ? 'WFH' : (currentRecord.workArrangement === 'FIELD_DUTY' ? 'Field Duty' : currentRecord.workArrangement)
+    }
+    return 'Office'
+  })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const [errorMessage, setErrorMessage] = useState(null)
 
   const activeBusinessDate = currentRecord?.date || getKarachiToday()
+
+  // Auto-detect approved WFH or Field Duty for today to default dropdown
+  useEffect(() => {
+    if (!currentRecord?.checkInTime) {
+      try {
+        const empCode = currentUser?.employeeId || currentUser?.id
+        const todayStr = getKarachiToday()
+        const rawWfh = localStorage.getItem('isysware_wfh_requests')
+        if (rawWfh) {
+          const list = JSON.parse(rawWfh)
+          const isWfh = list.some(w => (w.employeeId === empCode) && (w.status === 'Approved' || w.status === 'APPROVED') && (w.requestedDate === todayStr || (w.startDate && w.startDate.slice(0, 10) <= todayStr && w.endDate && w.endDate.slice(0, 10) >= todayStr)))
+          if (isWfh) {
+            setWorkArrangement('WFH')
+            return
+          }
+        }
+        const rawFd = localStorage.getItem('isysware_field_duty_requests')
+        if (rawFd) {
+          const list = JSON.parse(rawFd)
+          const isFd = list.some(f => (f.employeeId === empCode) && (f.status === 'Approved' || f.status === 'APPROVED') && (f.visitDate === todayStr || (f.dutyDate && f.dutyDate.slice(0, 10) === todayStr)))
+          if (isFd) {
+            setWorkArrangement('Field Duty')
+            return
+          }
+        }
+      } catch (_) {}
+    }
+  }, [currentRecord?.checkInTime, currentUser])
 
   const displayShift = useMemo(() => {
     // 1. If current record has an explicitly saved shiftId, use that shift
@@ -194,8 +227,8 @@ export function CheckInOutWidget({
                   <AppIcon name="success" className="w-3.5 h-3.5 text-emerald-600" />
                   Active session since {formatTimeTo12Hour(currentRecord.checkInTime)}
                 </span>
-                <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-300">
-                  {currentRecord.workArrangement}
+                <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-300 font-semibold">
+                  {currentRecord.workArrangement === 'REMOTE_WFH' ? 'WFH' : (currentRecord.workArrangement === 'FIELD_DUTY' ? 'Field Duty' : (currentRecord.workArrangement || 'Office'))}
                 </span>
               </div>
 
