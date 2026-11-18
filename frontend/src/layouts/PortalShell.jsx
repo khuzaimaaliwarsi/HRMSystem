@@ -8,7 +8,7 @@ export function PortalShell() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-hrms-canvas flex">
+    <div className="min-h-[125vh] bg-hrms-canvas flex w-full">
       {/* Desktop Collapsible Sidebar */}
       <AppSidebar
         collapsed={sidebarCollapsed}
@@ -36,12 +36,12 @@ export function PortalShell() {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 w-full">
         {/* Top Navigation Bar */}
         <TopNavbar onOpenMobile={() => setMobileDrawerOpen(true)} />
 
-        {/* Page Container */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-3.5 max-w-[1600px] w-full mx-auto">
+        {/* Page Container: Full screen width, edge-to-edge */}
+        <main className="flex-1 px-4 sm:px-6 py-4 w-full">
           <Outlet />
         </main>
       </div>

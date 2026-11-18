@@ -33,6 +33,16 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
   // Fetch real authoritative employees from PostgreSQL API whenever modal opens
   const fetchEmployeesFromApi = async () => {
     if (!isSuperAdminOrHr) return;
@@ -157,7 +167,7 @@ export default function LoanRequestModal({ isOpen, onClose, onLoanCreated, emplo
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overscroll-contain animate-in fade-in duration-150">
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
         <div className="px-6 py-4 bg-navy-950 text-white flex justify-between items-center">
           <div>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import Alert from '@/components/common/Alert'
@@ -32,6 +33,16 @@ export function LeaveRequestModal({
   const [attachmentUrl, setAttachmentUrl] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isOpen])
 
   const [prevUserId, setPrevUserId] = useState(effectiveUserId)
   if (effectiveUserId !== prevUserId) {
@@ -208,8 +219,10 @@ export function LeaveRequestModal({
     ? available
     : Math.max(0, Math.round((available - requestedWorkingDays) * 10) / 10)
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm p-3 sm:p-4 flex justify-center items-start pt-6 sm:pt-10 pb-10">
+  if (!isOpen) return null
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] overflow-y-auto overscroll-contain bg-slate-950/70 backdrop-blur-sm p-3 sm:p-4 flex justify-center items-start pt-6 sm:pt-10 pb-10">
       <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 text-left overflow-hidden flex flex-col max-h-[calc(100vh-4rem)] animate-in fade-in-50 zoom-in-95 duration-200">
         {/* Header - Fixed Top Bar, Always Fully Visible */}
         <div className="sticky top-0 z-20 px-6 py-4 bg-[#102746] text-white flex items-center justify-between shrink-0 border-b border-slate-700 shadow-sm">
@@ -548,6 +561,8 @@ export function LeaveRequestModal({
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
 }
 
 export default LeaveRequestModal
