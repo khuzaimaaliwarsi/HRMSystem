@@ -1204,7 +1204,7 @@ export async function syncRecruitment() {
         'FULFILLED': 'Fulfilled'
       }
 
-      recruitmentService.memoryStorage['isysware_hrms_f03_requisitions_v1'] = reqsRes.value.map((r) => {
+      const mappedReqs = reqsRes.value.map((r) => {
         const dept = depts.find((d) => d.id === r.departmentId || d.code === r.departmentId)
         const desig = desigs.find((d) => d.id === r.designationId || d.code === r.designationId)
         return {
@@ -1229,6 +1229,11 @@ export async function syncRecruitment() {
           createdDate: r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : ''
         }
       })
+      if (mappedReqs.length > 0) {
+        recruitmentService._setItem('isysware_hrms_f03_requisitions_v1', mappedReqs)
+      } else {
+        recruitmentService.memoryStorage['isysware_hrms_f03_requisitions_v1'] = mappedReqs
+      }
     }
 
     if (openingsRes.status === 'fulfilled' && Array.isArray(openingsRes.value)) {
@@ -1237,7 +1242,7 @@ export async function syncRecruitment() {
         'ON_HOLD': 'On Hold',
         'CLOSED': 'Closed'
       }
-      recruitmentService.memoryStorage['isysware_hrms_f03_vacancies_v1'] = openingsRes.value.map((v) => {
+      const mappedOpenings = openingsRes.value.map((v) => {
         const dept = depts.find((d) => d.id === v.departmentId || d.code === v.departmentId)
         const parentReq = (reqsRes.status === 'fulfilled' && Array.isArray(reqsRes.value))
           ? reqsRes.value.find((r) => r.id === v.requisitionId || r.requisitionNumber === v.requisitionId)
@@ -1266,90 +1271,97 @@ export async function syncRecruitment() {
           postedDate: v.postedAt ? new Date(v.postedAt).toISOString().slice(0, 10) : ''
         }
       })
+      if (mappedOpenings.length > 0) {
+        recruitmentService._setItem('isysware_hrms_f03_vacancies_v1', mappedOpenings)
+      } else {
+        recruitmentService.memoryStorage['isysware_hrms_f03_vacancies_v1'] = mappedOpenings
+      }
     }
-
 
     if (candsRes.status === 'fulfilled' && Array.isArray(candsRes.value)) {
-      recruitmentService.memoryStorage['isysware_hrms_f03_candidates_v1'] =
-        candsRes.value.map((c) => {
-          const application = c.applications?.[0] || null
+      const mappedCands = candsRes.value.map((c) => {
+        const application = c.applications?.[0] || null
 
-          const firstName = String(c.firstName || '').trim()
-          const lastName = String(c.lastName || '').trim()
-          const fullName = [firstName, lastName]
-            .filter((v) => v && v !== '.')
-            .join(' ') || 'Unknown Candidate'
+        const firstName = String(c.firstName || '').trim()
+        const lastName = String(c.lastName || '').trim()
+        const fullName = [firstName, lastName]
+          .filter((v) => v && v !== '.')
+          .join(' ') || 'Unknown Candidate'
 
-          const status = application?.status || 'UNASSIGNED'
+        const status = application?.status || 'UNASSIGNED'
 
-          const stageMap = {
-            APPLIED: 'Application Received',
-            SCREENING: 'Initial Screening',
-            SHORTLISTED: 'Shortlisted',
-            INTERVIEWING: 'Interview Scheduled',
-            OFFERED: 'Offer Stage',
-            HIRED: 'Hired',
-            REJECTED: 'Rejected',
-            WITHDRAWN: 'Withdrawn'
-          }
+        const stageMap = {
+          APPLIED: 'Application Received',
+          SCREENING: 'Initial Screening',
+          SHORTLISTED: 'Shortlisted',
+          INTERVIEWING: 'Interview Scheduled',
+          OFFERED: 'Offer Stage',
+          HIRED: 'Hired',
+          REJECTED: 'Rejected',
+          WITHDRAWN: 'Withdrawn'
+        }
 
-          return {
-            id: c.candidateCode || c.id,
-            cuid: c.id,
-            candidateCode: c.candidateCode,
-            firstName,
-            lastName,
-            fullName,
-            name: fullName,
-            email: c.email || '',
-            phone: c.phone || '',
-            city: c.city || '',
-            currentCompany: c.currentCompany || '',
-            currentDesignation: c.currentDesignation || '',
-            currentRole: c.currentDesignation || '',
-            experienceYears: Number(c.totalExperienceYears ?? 0),
-            experience: `${Number(c.totalExperienceYears ?? 0)} Years`,
-            vacancyId: application?.opening?.openingCode || application?.openingId || '',
-            vacancyTitle: application?.opening?.title || 'Not Assigned',
-            appliedForRole: application?.opening?.title || 'Not Assigned',
-            applicationDate: c.createdAt
-              ? new Date(c.createdAt).toISOString().slice(0, 10)
-              : '',
-            appliedDate: c.createdAt
-              ? new Date(c.createdAt).toISOString().slice(0, 10)
-              : '',
-            stage: stageMap[status] || 'Application Received',
-            status: ['HIRED', 'REJECTED', 'WITHDRAWN'].includes(status)
-              ? status.charAt(0) + status.slice(1).toLowerCase()
-              : 'Active',
-            applicationId: application?.id || null,
-            expectedSalary: c.expectedSalary ?? null,
-            noticePeriodDays: c.noticePeriodDays ?? null,
-            skills: Array.isArray(c.skills) ? c.skills : [],
-            cvResumeRef: c.resumeUrl || null,
-            resumeUrl: c.resumeUrl || null,
-            source: c.source || 'DIRECT',
-            notes: (c.notes || []).map((n) => ({
-              id: n.id,
-              text: n.content,
-              content: n.content,
-              author: n.authorName || 'Recruiter',
-              authorRole: n.authorRole || 'HR Admin',
-              timestamp: n.createdAt ? new Date(n.createdAt).toISOString().replace('T', ' ').slice(0, 19) : '',
-              isConfidentialHrOnly: Boolean(n.isConfidential),
-              isConfidential: Boolean(n.isConfidential)
-            })),
-            stageHistory: []
-          }
-        })
+        return {
+          id: c.candidateCode || c.id,
+          cuid: c.id,
+          candidateCode: c.candidateCode,
+          firstName,
+          lastName,
+          fullName,
+          name: fullName,
+          email: c.email || '',
+          phone: c.phone || '',
+          city: c.city || '',
+          currentCompany: c.currentCompany || '',
+          currentDesignation: c.currentDesignation || '',
+          currentRole: c.currentDesignation || '',
+          experienceYears: Number(c.totalExperienceYears ?? 0),
+          experience: `${Number(c.totalExperienceYears ?? 0)} Years`,
+          vacancyId: application?.opening?.openingCode || application?.openingId || '',
+          vacancyTitle: application?.opening?.title || 'Not Assigned',
+          appliedForRole: application?.opening?.title || 'Not Assigned',
+          applicationDate: c.createdAt
+            ? new Date(c.createdAt).toISOString().slice(0, 10)
+            : '',
+          appliedDate: c.createdAt
+            ? new Date(c.createdAt).toISOString().slice(0, 10)
+            : '',
+          stage: stageMap[status] || 'Application Received',
+          status: ['HIRED', 'REJECTED', 'WITHDRAWN'].includes(status)
+            ? status.charAt(0) + status.slice(1).toLowerCase()
+            : 'Active',
+          applicationId: application?.id || null,
+          expectedSalary: c.expectedSalary ?? null,
+          noticePeriodDays: c.noticePeriodDays ?? null,
+          skills: Array.isArray(c.skills) ? c.skills : [],
+          cvResumeRef: c.resumeUrl || null,
+          resumeUrl: c.resumeUrl || null,
+          source: c.source || 'DIRECT',
+          notes: (c.notes || []).map((n) => ({
+            id: n.id,
+            text: n.content,
+            content: n.content,
+            author: n.authorName || 'Recruiter',
+            authorRole: n.authorRole || 'HR Admin',
+            timestamp: n.createdAt ? new Date(n.createdAt).toISOString().replace('T', ' ').slice(0, 19) : '',
+            isConfidentialHrOnly: Boolean(n.isConfidential),
+            isConfidential: Boolean(n.isConfidential)
+          })),
+          stageHistory: []
+        }
+      })
+      if (mappedCands.length > 0) {
+        recruitmentService._setItem('isysware_hrms_f03_candidates_v1', mappedCands)
+      } else {
+        recruitmentService.memoryStorage['isysware_hrms_f03_candidates_v1'] = mappedCands
+      }
     }
 
-
-    if (offersRes.status === 'fulfilled' && Array.isArray(offersRes.value)) {
-      recruitmentService.memoryStorage['isysware_hrms_f03_offers_v1'] = offersRes.value
+    if (offersRes.status === 'fulfilled' && Array.isArray(offersRes.value) && offersRes.value.length > 0) {
+      recruitmentService._setItem('isysware_hrms_f03_offers_v1', offersRes.value)
     }
-    if (interviewsRes.status === 'fulfilled' && Array.isArray(interviewsRes.value)) {
-      recruitmentService.memoryStorage['isysware_hrms_f03_interviews_v1'] = interviewsRes.value
+    if (interviewsRes.status === 'fulfilled' && Array.isArray(interviewsRes.value) && interviewsRes.value.length > 0) {
+      recruitmentService._setItem('isysware_hrms_f03_interviews_v1', interviewsRes.value)
     }
     recruitmentService._notify?.()
   } catch (err) {

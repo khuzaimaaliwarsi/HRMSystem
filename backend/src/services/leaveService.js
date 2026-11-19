@@ -609,7 +609,7 @@ export const leaveService = {
       }
 
       return tx.leaveRequest.update({
-        where: { id: leaveId },
+        where: { id: leave.id },
         data: {
           status: decision,
           approvedById: reviewerUser?.id || null,
@@ -720,7 +720,7 @@ export const leaveService = {
       }
 
       return tx.leaveRequest.update({
-        where: { id: leaveId },
+        where: { id: leave.id },
         data: {
           status: 'CANCELLED',
           cancelledById: cancelledByUserId,

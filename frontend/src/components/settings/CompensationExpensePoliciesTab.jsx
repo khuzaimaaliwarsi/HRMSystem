@@ -881,7 +881,7 @@ export function CompensationExpensePoliciesTab() {
         createPortal(
           <div
             onClick={() => setEditingPolicyId(null)}
-            className="fixed inset-0 top-0 left-0 right-0 bottom-0 w-screen h-screen min-h-screen min-w-full z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in duration-150"
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -1306,7 +1306,7 @@ export function CompensationExpensePoliciesTab() {
         createPortal(
           <div
             onClick={() => setHistoryPolicy(null)}
-            className="fixed inset-0 top-0 left-0 right-0 bottom-0 w-screen h-screen min-h-screen min-w-full z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in duration-150"
           >
             <div
               onClick={(e) => e.stopPropagation()}
