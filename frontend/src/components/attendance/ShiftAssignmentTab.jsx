@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useAuth } from '@/context/useAuth'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import StatusBadge from '@/components/common/StatusBadge'
@@ -9,10 +10,20 @@ export function ShiftAssignmentTab({
   assignments = [],
   shifts = [],
   employees = [],
+  teams = [],
   _teams = [],
   onOpenAssignModal,
-  canAssign = true
+  canAssign = true,
+  currentUser = null
 }) {
+  const { user } = useAuth()
+  const activeUser = currentUser || user
+  const roleStr = String(activeUser?.role || activeUser?.portalRole || '').toLowerCase().replace(/[^a-z]/g, '')
+  const isSuperAdminByRole = roleStr.includes('superadmin') || roleStr === 'admin' || activeUser?.username === 'superadmin'
+  const isSuperAdminByPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/super-admin')
+  const isSuperAdminPortal = isSuperAdminByRole || isSuperAdminByPath
+  const portalDefaultAssigner = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || 'HR Admin')
+
   const [shiftFilter, setShiftFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [editingAssignment, setEditingAssignment] = useState(null)
@@ -47,10 +58,12 @@ export function ShiftAssignmentTab({
       }
     }
 
-    const assignedByDisplay =
-      a.assignedByName ||
-      (typeof a.assignedBy === 'string' && a.assignedBy.startsWith('cmw') ? 'HR Admin' : a.assignedBy) ||
-      'HR Admin'
+    let assignedByDisplay = a.assignedByName || a.assignedBy
+    if (!assignedByDisplay || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
+      assignedByDisplay = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || portalDefaultAssigner)
+    } else if (isSuperAdminPortal && (assignedByDisplay === 'HR Admin' || assignedByDisplay === 'HR Administrator')) {
+      assignedByDisplay = activeUser?.name || 'Super Admin'
+    }
 
     const effectiveUntilDisplay =
       (a.effectiveTo || a.effectiveUntil) ? (a.effectiveTo || a.effectiveUntil) : 'Indefinite'

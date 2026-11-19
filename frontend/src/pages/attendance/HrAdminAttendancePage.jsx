@@ -198,6 +198,7 @@ export function HrAdminAttendancePage() {
           employees={employees}
           teams={teams}
           canAssign={true}
+          currentUser={currentUser}
           onOpenAssignModal={() => setIsAssignModalOpen(true)}
         />
       )}

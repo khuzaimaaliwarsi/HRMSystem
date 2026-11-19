@@ -133,6 +133,7 @@ export const shiftService = {
         select: {
           id: true,
           username: true,
+          displayName: true,
           role: true,
           employee: {
             select: { firstName: true, lastName: true }
@@ -141,13 +142,13 @@ export const shiftService = {
       })
       userMap = new Map(users.map(u => {
         const empName = [u.employee?.firstName, u.employee?.lastName].filter(Boolean).join(' ')
-        const readable = empName || (u.role === 'SUPER_ADMIN' ? 'Super Admin' : u.role === 'HR_ADMIN' ? 'HR Admin' : u.username || 'Admin')
+        const readable = empName || u.displayName || (u.role === 'SUPER_ADMIN' ? 'Super Admin' : u.role === 'HR_ADMIN' ? 'HR Admin' : u.username || 'Super Admin')
         return [u.id, readable]
       }))
     }
 
     return assignments.map(a => {
-      const assignedByName = a.assignedById ? (userMap.get(a.assignedById) || 'HR Admin') : 'System Administrator'
+      const assignedByName = a.assignedById ? (userMap.get(a.assignedById) || 'Super Admin') : 'Super Admin'
       return {
         ...a,
         employeeCode: a.employee?.employeeCode,

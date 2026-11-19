@@ -198,6 +198,7 @@ export function SuperAdminAttendancePage() {
           employees={employees}
           teams={teams}
           canAssign={true}
+          currentUser={currentUser}
           onOpenAssignModal={() => setIsAssignModalOpen(true)}
         />
       )}

@@ -428,7 +428,10 @@ export async function syncAttendanceAndShifts() {
         const shiftId = a.shift?.shiftCode || a.shift?.id || a.shiftId
         const shiftName = a.shift?.name || a.shiftName || 'Standard Day Shift'
         const rawStatus = (a.status || 'ACTIVE').toUpperCase()
-        const assignedBy = a.assignedByName || (typeof a.assignedBy === 'string' && a.assignedBy.startsWith('cmw') ? 'HR Admin' : a.assignedBy) || 'HR Admin'
+        const rawAssignedBy = a.assignedByName || a.assignedBy
+        const assignedBy = (!rawAssignedBy || (typeof rawAssignedBy === 'string' && rawAssignedBy.startsWith('cmw')))
+          ? 'Super Admin'
+          : rawAssignedBy
 
         return {
           id: a.id,
