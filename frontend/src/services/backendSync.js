@@ -722,7 +722,20 @@ export async function syncLeaves() {
             approvalHistory: history
           }
         })
-        leaveService.memoryStorage['isysware_hrms_f05_leave_requests_v1'] = formatted
+        const reqKey = 'isysware_hrms_f05_leave_requests_v1'
+        const localRequests = (leaveService._getItem ? leaveService._getItem(reqKey, []) : leaveService.memoryStorage[reqKey]) || []
+        const merged = formatted.map((backendReq) => {
+          const local = localRequests.find((l) => l.id === backendReq.id || l.requestCode === backendReq.requestCode)
+          if (local && (local.status === 'Approved' || local.status === 'Rejected') && backendReq.status.startsWith('Pending')) {
+            return { ...backendReq, ...local }
+          }
+          return backendReq
+        })
+        if (leaveService._setItem) {
+          leaveService._setItem(reqKey, merged)
+        } else {
+          leaveService.memoryStorage[reqKey] = merged
+        }
       }
     }
 

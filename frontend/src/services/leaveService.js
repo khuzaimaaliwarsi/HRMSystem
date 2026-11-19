@@ -16,6 +16,7 @@ import { leaveBalanceService } from './leaveBalanceService.js'
 import { shiftService } from './shiftService.js'
 import { attendanceService } from './attendanceService.js'
 import { employeeService } from './employeeService.js'
+import apiClient from './apiClient.js'
 
 const STORAGE_KEYS = {
   REQUESTS: 'isysware_hrms_f05_leave_requests_v1',
@@ -568,6 +569,17 @@ class LeaveService {
 
     this._setItem(STORAGE_KEYS.REQUESTS, list)
     this._notify()
+
+    const targetBackendId = request.cuid || request.backendId || request.requestCode || requestId
+    if (typeof window !== 'undefined') {
+      apiClient.patch(`/leaves/${targetBackendId}/review`, {
+        decision: 'APPROVED',
+        remarks: remarks || `Approved by ${actorName}`
+      }).catch((err) => {
+        console.warn('[leaveService] Backend leave review sync non-fatal error:', err?.message)
+      })
+    }
+
     return request
   }
 
@@ -611,6 +623,17 @@ class LeaveService {
 
     this._setItem(STORAGE_KEYS.REQUESTS, list)
     this._notify()
+
+    const targetBackendId = request.cuid || request.backendId || request.requestCode || requestId
+    if (typeof window !== 'undefined') {
+      apiClient.patch(`/leaves/${targetBackendId}/review`, {
+        decision: 'REJECTED',
+        remarks: remarks || `Rejected by ${actorName}`
+      }).catch((err) => {
+        console.warn('[leaveService] Backend leave reject sync non-fatal error:', err?.message)
+      })
+    }
+
     return request
   }
 

@@ -45,14 +45,21 @@ class RecruitmentService {
     this._initialize()
   }
 
-  // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
+  // Storage abstraction — persists across reloads in browser and test runtimes
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const val = window.localStorage.getItem(key)
         if (val !== null) {
-          try { return JSON.parse(val) } catch { return val }
+          try {
+            const parsed = JSON.parse(val)
+            this.memoryStorage[key] = parsed
+            return parsed
+          } catch {
+            this.memoryStorage[key] = val
+            return val
+          }
         }
       } catch {
         // ignore
@@ -63,7 +70,7 @@ class RecruitmentService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
       } catch {
@@ -73,25 +80,23 @@ class RecruitmentService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      if (!this._getItem(STORAGE_KEYS.REQUISITIONS, null)) {
-        this._setItem(STORAGE_KEYS.REQUISITIONS, INITIAL_REQUISITIONS)
-      }
-      if (!this._getItem(STORAGE_KEYS.VACANCIES, null)) {
-        this._setItem(STORAGE_KEYS.VACANCIES, INITIAL_VACANCIES)
-      }
-      if (!this._getItem(STORAGE_KEYS.CANDIDATES, null)) {
-        this._setItem(STORAGE_KEYS.CANDIDATES, INITIAL_CANDIDATES)
-      }
-      if (!this._getItem(STORAGE_KEYS.INTERVIEWS, null)) {
-        this._setItem(STORAGE_KEYS.INTERVIEWS, INITIAL_INTERVIEWS)
-      }
-      if (!this._getItem(STORAGE_KEYS.OFFERS, null)) {
-        this._setItem(STORAGE_KEYS.OFFERS, INITIAL_OFFERS)
-      }
-      if (!this._getItem(STORAGE_KEYS.PROBATION, null)) {
-        this._setItem(STORAGE_KEYS.PROBATION, INITIAL_PROBATION_RECORDS)
-      }
+    if (!this._getItem(STORAGE_KEYS.REQUISITIONS, null)) {
+      this._setItem(STORAGE_KEYS.REQUISITIONS, INITIAL_REQUISITIONS)
+    }
+    if (!this._getItem(STORAGE_KEYS.VACANCIES, null)) {
+      this._setItem(STORAGE_KEYS.VACANCIES, INITIAL_VACANCIES)
+    }
+    if (!this._getItem(STORAGE_KEYS.CANDIDATES, null)) {
+      this._setItem(STORAGE_KEYS.CANDIDATES, INITIAL_CANDIDATES)
+    }
+    if (!this._getItem(STORAGE_KEYS.INTERVIEWS, null)) {
+      this._setItem(STORAGE_KEYS.INTERVIEWS, INITIAL_INTERVIEWS)
+    }
+    if (!this._getItem(STORAGE_KEYS.OFFERS, null)) {
+      this._setItem(STORAGE_KEYS.OFFERS, INITIAL_OFFERS)
+    }
+    if (!this._getItem(STORAGE_KEYS.PROBATION, null)) {
+      this._setItem(STORAGE_KEYS.PROBATION, INITIAL_PROBATION_RECORDS)
     }
 
     // Safe QA Record Self-Healing: Correct 02/11/2026 -> 2026-11-02 for Huzaifa/EMP-018

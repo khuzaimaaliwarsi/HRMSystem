@@ -89,5 +89,27 @@ router.get('/db', async (_req, res, next) => {
   }
 })
 
+/**
+ * GET /api/v1/health/tables
+ * Lists all public tables and counts
+ */
+router.get('/tables', async (_req, res, next) => {
+  try {
+    const { prisma } = await import('../config/database.js')
+    const tables = await prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`
+    let userCount = 0
+    let leaveCount = 0
+    try {
+      userCount = await prisma.user.count()
+      leaveCount = await prisma.leaveRequest.count()
+    } catch (e) {
+      // ignore
+    }
+    return sendSuccess(res, { tables, userCount, leaveCount }, undefined, 200)
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router
 

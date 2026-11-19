@@ -493,8 +493,13 @@ export const leaveService = {
       throw error
     }
 
-    const leave = await prisma.leaveRequest.findUnique({
-      where: { id: leaveId },
+    const leave = await prisma.leaveRequest.findFirst({
+      where: {
+        OR: [
+          { id: leaveId },
+          { requestCode: leaveId }
+        ]
+      },
       include: {
         employee: true,
         leaveType: true
@@ -632,8 +637,13 @@ export const leaveService = {
    * Cancels a leave request and posts an idempotent offsetting reversal in the journal.
    */
   async cancelLeave(leaveId, cancelledByUserId, reason = 'User requested cancellation') {
-    const leave = await prisma.leaveRequest.findUnique({
-      where: { id: leaveId },
+    const leave = await prisma.leaveRequest.findFirst({
+      where: {
+        OR: [
+          { id: leaveId },
+          { requestCode: leaveId }
+        ]
+      },
       include: { leaveType: true }
     })
 

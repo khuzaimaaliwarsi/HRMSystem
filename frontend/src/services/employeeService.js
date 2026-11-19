@@ -62,14 +62,21 @@ class EmployeeService {
     this._initialize()
   }
 
-  // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
+  // Safe storage abstraction — persists across reloads in browser and tests
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const val = window.localStorage.getItem(key)
         if (val !== null) {
-          try { return JSON.parse(val) } catch { return val }
+          try {
+            const parsed = JSON.parse(val)
+            this.memoryStorage[key] = parsed
+            return parsed
+          } catch {
+            this.memoryStorage[key] = val
+            return val
+          }
         }
       } catch {
         // ignore
@@ -80,7 +87,7 @@ class EmployeeService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
       } catch {
@@ -90,37 +97,36 @@ class EmployeeService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        this.memoryStorage = {}
-      }
-      if (!this._getItem(STORAGE_KEYS.DEPARTMENTS, null)) {
-        this._setItem(STORAGE_KEYS.DEPARTMENTS, INITIAL_DEPARTMENTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.SUB_DEPARTMENTS, null)) {
-        this._setItem(STORAGE_KEYS.SUB_DEPARTMENTS, INITIAL_SUB_DEPARTMENTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.TEAMS, null)) {
-        this._setItem(STORAGE_KEYS.TEAMS, INITIAL_TEAMS)
-      }
-      if (!this._getItem(STORAGE_KEYS.DESIGNATIONS, null)) {
-        this._setItem(STORAGE_KEYS.DESIGNATIONS, INITIAL_DESIGNATIONS)
-      }
-      if (!this._getItem(STORAGE_KEYS.EMPLOYEES, null)) {
-        this._setItem(STORAGE_KEYS.EMPLOYEES, CANONICAL_EMPLOYEES)
-      }
-      if (!this._getItem(STORAGE_KEYS.BANK_RECORDS, null)) {
-        this._setItem(STORAGE_KEYS.BANK_RECORDS, INITIAL_BANK_RECORDS)
-      }
-      if (!this._getItem(STORAGE_KEYS.CAREER_HISTORY, null)) {
-        this._setItem(STORAGE_KEYS.CAREER_HISTORY, INITIAL_CAREER_HISTORY)
-      }
-      if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, null)) {
-        this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, INITIAL_TEAM_ASSIGNMENTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, null)) {
-        this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, [])
-      }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      this.memoryStorage = {}
+    }
+    if (!this._getItem(STORAGE_KEYS.DEPARTMENTS, null)) {
+      this._setItem(STORAGE_KEYS.DEPARTMENTS, INITIAL_DEPARTMENTS)
+    }
+    if (!this._getItem(STORAGE_KEYS.SUB_DEPARTMENTS, null)) {
+      this._setItem(STORAGE_KEYS.SUB_DEPARTMENTS, INITIAL_SUB_DEPARTMENTS)
+    }
+    if (!this._getItem(STORAGE_KEYS.TEAMS, null)) {
+      this._setItem(STORAGE_KEYS.TEAMS, INITIAL_TEAMS)
+    }
+    if (!this._getItem(STORAGE_KEYS.DESIGNATIONS, null)) {
+      this._setItem(STORAGE_KEYS.DESIGNATIONS, INITIAL_DESIGNATIONS)
+    }
+    if (!this._getItem(STORAGE_KEYS.EMPLOYEES, null)) {
+      this._setItem(STORAGE_KEYS.EMPLOYEES, CANONICAL_EMPLOYEES)
+    }
+    if (!this._getItem(STORAGE_KEYS.BANK_RECORDS, null)) {
+      this._setItem(STORAGE_KEYS.BANK_RECORDS, INITIAL_BANK_RECORDS)
+    }
+    if (!this._getItem(STORAGE_KEYS.CAREER_HISTORY, null)) {
+      this._setItem(STORAGE_KEYS.CAREER_HISTORY, INITIAL_CAREER_HISTORY)
+    }
+    if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, null)) {
+      this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, INITIAL_TEAM_ASSIGNMENTS)
+    }
+    if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, null)) {
+      this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, [])
+    }
 
       // Safe QA Record Self-Healing: Correct 02/11/2026 -> 2026-11-02 for EMP-018 without mutating unrelated employees
       try {
@@ -188,7 +194,6 @@ class EmployeeService {
       } catch {
         // Safe guard against corrupt storage
       }
-    }
     // Note: Multiple active Team Leads per team are permitted for shared leadership/coverage (Bug 07 / Bug 08).
     // Startup reconciliation must not automatically supersede active co-leads or demote their user accounts.
   }
