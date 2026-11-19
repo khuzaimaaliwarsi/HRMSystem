@@ -8,7 +8,7 @@ export function PortalShell() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
   return (
-    <div className="min-h-[125vh] bg-hrms-canvas flex w-full">
+    <div className="min-h-screen bg-hrms-canvas flex w-full">
       {/* Desktop Collapsible Sidebar */}
       <AppSidebar
         collapsed={sidebarCollapsed}

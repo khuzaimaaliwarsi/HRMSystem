@@ -975,24 +975,29 @@ class AttendanceService {
     let isHalfDay = false
     let primaryClassification = current.primaryClassification
 
-    const halfDayThreshold = policy.halfDayThresholdHours || 4.0
-    if (shift.expectedWorkingHours >= 7.0) {
-      if (workedHours < halfDayThreshold) {
-        // Less than 4 hours is treated as Absent (or incomplete day)
-        primaryClassification = 'Absent'
-      } else if (workedHours >= halfDayThreshold && workedHours < 6.0) {
-        isHalfDay = true
-        primaryClassification = 'Half Day'
+    const isPartTime = shift.type === 'Part-Time' || (shift.expectedWorkingHours && shift.expectedWorkingHours < 7.0)
+    const expectedHours = isPartTime ? Number(shift.expectedWorkingHours || 4.0) : Number(shift.expectedWorkingHours || 8.0)
+    const halfDayThreshold = isPartTime
+      ? (policy.halfDayThresholdHours ? Math.min(policy.halfDayThresholdHours, expectedHours / 2) : (expectedHours / 2))
+      : (policy.halfDayThresholdHours || 4.0)
+
+    if (workedHours <= 0) {
+      isHalfDay = true
+      primaryClassification = 'Half Day'
+    } else if (workedHours < halfDayThreshold) {
+      primaryClassification = 'Absent'
+    } else if (workedHours >= halfDayThreshold && workedHours < (isPartTime ? expectedHours : 6.0)) {
+      isHalfDay = true
+      primaryClassification = 'Half Day'
+    } else {
+      if (current.isLate) {
+        primaryClassification = 'Late'
+      } else if (current.workArrangement === 'WFH') {
+        primaryClassification = 'WFH'
+      } else if (current.workArrangement === 'Field Duty') {
+        primaryClassification = 'Field Duty'
       } else {
-        if (current.isLate) {
-          primaryClassification = 'Late'
-        } else if (current.workArrangement === 'WFH') {
-          primaryClassification = 'WFH'
-        } else if (current.workArrangement === 'Field Duty') {
-          primaryClassification = 'Field Duty'
-        } else {
-          primaryClassification = 'Present'
-        }
+        primaryClassification = 'Present'
       }
     }
 

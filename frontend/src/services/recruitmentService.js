@@ -932,6 +932,31 @@ class RecruitmentService {
     return newInterview
   }
 
+  async scheduleInterviewAsync(data, actor = 'Ayesha Khan (HR Admin)') {
+    const scheduled = this.scheduleInterview(data, actor)
+    if (typeof window !== 'undefined') {
+      try {
+        const { apiClient } = await import('./apiClient.js')
+        const candidate = this.getCandidateById(data.candidateId)
+        const targetAppId = candidate?.applicationId || candidate?.applications?.[0]?.id || data.applicationId
+        if (targetAppId) {
+          const [sH, sM] = (data.startTime || '11:00').split(':').map(Number)
+          const dt = new Date(`${data.scheduledDate}T${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:00.000Z`)
+          await apiClient.post(`/recruitment/applications/${targetAppId}/interviews`, {
+            interviewerId: Array.isArray(data.interviewerIds) ? data.interviewerIds[0] : (data.interviewerId || 'EMP-004'),
+            roundNumber: 1,
+            roundTitle: data.round || 'Round 1 - Technical Screening',
+            scheduledAt: dt.toISOString(),
+            meetingLink: data.venueMeetingLink || 'https://meet.google.com/isysware-interview'
+          }).catch((err) => console.warn('[Recruitment] schedule interview API note:', err.message))
+        }
+      } catch (err) {
+        console.warn('[Recruitment] schedule interview async warning:', err)
+      }
+    }
+    return scheduled
+  }
+
   submitInterviewEvaluation(interviewId, evaluationData, actor = 'Bilal Siddiqui') {
     const list = [...this._getItem(STORAGE_KEYS.INTERVIEWS, [])]
     const interview = list.find((i) => i.id === interviewId)

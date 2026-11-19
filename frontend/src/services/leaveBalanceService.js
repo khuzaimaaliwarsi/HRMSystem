@@ -159,30 +159,49 @@ class LeaveBalanceService {
     const ledger = [...this._getItem(STORAGE_KEYS.LEDGER, INITIAL_LEAVE_LEDGER)]
 
     for (const req of approvedRequests) {
-      if (!journaledRefIds.has(req.id)) {
-        let idx = ledger.findIndex(
+      const isAlreadyJournaled = journaledRefIds.has(req.id) ||
+        (req.requestCode && journaledRefIds.has(req.requestCode)) ||
+        (req.cuid && journaledRefIds.has(req.cuid))
+
+      let idx = ledger.findIndex(
+        (l) => l.employeeId === req.employeeId && (l.leaveTypeId === req.leaveTypeId || l.leaveTypeId.includes(req.leaveTypeId))
+      )
+      if (idx === -1) {
+        this.getEmployeeBalances(req.employeeId)
+        const refreshed = [...this._getItem(STORAGE_KEYS.LEDGER, INITIAL_LEAVE_LEDGER)]
+        idx = refreshed.findIndex(
           (l) => l.employeeId === req.employeeId && (l.leaveTypeId === req.leaveTypeId || l.leaveTypeId.includes(req.leaveTypeId))
         )
-        if (idx === -1) {
-          this.getEmployeeBalances(req.employeeId)
-          const refreshed = [...this._getItem(STORAGE_KEYS.LEDGER, INITIAL_LEAVE_LEDGER)]
-          idx = refreshed.findIndex(
-            (l) => l.employeeId === req.employeeId && (l.leaveTypeId === req.leaveTypeId || l.leaveTypeId.includes(req.leaveTypeId))
-          )
+      }
+
+      if (idx !== -1) {
+        const entry = { ...ledger[idx] }
+        const amt = Number(req.eligibleWorkingDays || req.calculatedDays || 1.0)
+
+        // Strict Idempotent Reconciliation:
+        // Set utilized strictly equal to total approved days for this employee & leave type
+        const typeMatcher = (r) => {
+          if (r.leaveTypeId === entry.leaveTypeId || entry.leaveTypeId.includes(r.leaveTypeId)) return true
+          if (r.leaveTypeCode && entry.leaveTypeId.toLowerCase().includes(r.leaveTypeCode.toLowerCase())) return true
+          if (r.leaveType && entry.leaveTypeId.toLowerCase().includes(r.leaveType.toLowerCase().replace(/\s+/g, ''))) return true
+          return false
         }
+        const approvedForType = requests.filter(
+          (r) => r.employeeId === req.employeeId && typeMatcher(r) && r.status === 'Approved'
+        )
+        const totalApprovedDays = approvedForType.reduce(
+          (sum, r) => sum + Number(r.eligibleWorkingDays || r.calculatedDays || r.days || 1.0), 0
+        )
 
-        if (idx !== -1) {
-          const entry = { ...ledger[idx] }
-          const amt = Number(req.eligibleWorkingDays || req.calculatedDays || 1.0)
+        entry.pending = Math.round(Math.max(0, (entry.pending || 0) - amt) * 10) / 10
+        entry.utilized = Math.round(totalApprovedDays * 10) / 10
+        entry.closingBalance = Math.round((this._getBaseEntitlement(entry) + (entry.earnedAccrued || 0) + (entry.adjustments || 0) - entry.utilized) * 10) / 10
+        entry.availableBalance = Math.round(Math.max(0, entry.closingBalance - (entry.pending || 0)) * 10) / 10
 
-          entry.pending = Math.round(Math.max(0, (entry.pending || 0) - amt) * 10) / 10
-          entry.utilized = Math.round(((entry.utilized || 0) + amt) * 10) / 10
-          entry.closingBalance = Math.round((this._getBaseEntitlement(entry) + (entry.earnedAccrued || 0) + (entry.adjustments || 0) - entry.utilized) * 10) / 10
-          entry.availableBalance = Math.round(Math.max(0, entry.closingBalance - (entry.pending || 0)) * 10) / 10
+        ledger[idx] = entry
+        modified = true
 
-          ledger[idx] = entry
-          modified = true
-
+        if (!isAlreadyJournaled) {
           journal.push({
             id: `JRN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             employeeId: req.employeeId,
@@ -195,6 +214,8 @@ class LeaveBalanceService {
             notes: `Utilization reconciled for approved leave ${req.id}`
           })
           journaledRefIds.add(req.id)
+          if (req.requestCode) journaledRefIds.add(req.requestCode)
+          if (req.cuid) journaledRefIds.add(req.cuid)
         }
       }
     }

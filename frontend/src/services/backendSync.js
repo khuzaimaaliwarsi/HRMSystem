@@ -1358,10 +1358,82 @@ export async function syncRecruitment() {
     }
 
     if (offersRes.status === 'fulfilled' && Array.isArray(offersRes.value) && offersRes.value.length > 0) {
-      recruitmentService._setItem('isysware_hrms_f03_offers_v1', offersRes.value)
+      const mappedOffers = offersRes.value.map((o, idx) => {
+        const cand = o.candidate || o.application?.candidate || {}
+        const candName = [cand.firstName, cand.lastName].filter(Boolean).join(' ') || o.candidateName || 'Candidate'
+        const opening = o.opening || o.application?.opening || {}
+        return {
+          id: o.offerCode || o.id || `OFF-${String(idx + 1).padStart(3, '0')}`,
+          cuid: o.id,
+          candidateId: cand.candidateCode || cand.id || o.candidateId,
+          candidateName: candName,
+          jobTitle: opening.title || o.jobTitle || 'Position',
+          departmentId: opening.departmentId || o.departmentId || '',
+          offeredSalary: Number(o.offeredSalary || o.baseSalary || 150000),
+          joiningDate: o.joiningDate ? new Date(o.joiningDate).toISOString().slice(0, 10) : '',
+          status: o.status === 'APPROVED' ? 'Approved' : (o.status === 'REJECTED' ? 'Rejected' : (o.status === 'ACCEPTED' ? 'Accepted' : 'Pending Approval')),
+          approvalWorkflow: o.approvalWorkflow || null
+        }
+      })
+      recruitmentService._setItem('isysware_hrms_f03_offers_v1', mappedOffers)
     }
     if (interviewsRes.status === 'fulfilled' && Array.isArray(interviewsRes.value) && interviewsRes.value.length > 0) {
-      recruitmentService._setItem('isysware_hrms_f03_interviews_v1', interviewsRes.value)
+      const emps = employeeService.getEmployees()
+      const statusMap = {
+        'SCHEDULED': 'Scheduled',
+        'COMPLETED': 'Completed',
+        'CANCELLED': 'Cancelled',
+        'RESCHEDULED': 'Rescheduled'
+      }
+
+      const mappedInterviews = interviewsRes.value.map((i, idx) => {
+        const cand = i.application?.candidate || {}
+        const candName = [cand.firstName, cand.lastName].filter(Boolean).join(' ') || i.candidateName || 'UAT QA Candidate'
+        const opening = i.application?.opening || {}
+        const jobTitle = opening.title || i.jobTitle || 'UAT QA Engineer'
+        const interviewer = emps.find((e) => e.cuid === i.interviewerId || e.id === i.interviewerId || e.employeeCode === i.interviewerId)
+        const interviewerName = interviewer?.name || i.interviewerName || 'UAT Dev Manager'
+
+        let scheduledDate = '2026-11-20'
+        let startTime = '11:00'
+        let endTime = '12:00'
+        if (i.scheduledAt) {
+          try {
+            const d = new Date(i.scheduledAt)
+            scheduledDate = d.toISOString().slice(0, 10)
+            const hours = String(d.getUTCHours()).padStart(2, '0')
+            const mins = String(d.getUTCMinutes()).padStart(2, '0')
+            startTime = `${hours}:${mins}`
+            const endH = String((d.getUTCHours() + 1) % 24).padStart(2, '0')
+            endTime = `${endH}:${mins}`
+          } catch {
+            // fallback
+          }
+        }
+
+        return {
+          id: i.interviewCode || i.id || `INT-${String(idx + 1).padStart(3, '0')}`,
+          cuid: i.id,
+          applicationId: i.applicationId,
+          candidateId: cand.candidateCode || cand.id || i.candidateId || 'CAND-001',
+          candidateName: candName,
+          candidateEmail: cand.email || 'uat.qa.candidate@example.com',
+          vacancyId: opening.openingCode || opening.id || i.vacancyId || 'VAC-001',
+          jobTitle,
+          round: i.roundTitle || 'Round 1 - Technical Screening',
+          type: i.meetingLink ? 'Online' : 'In-Person',
+          scheduledDate,
+          startTime,
+          endTime,
+          interviewerIds: [interviewer?.id || i.interviewerId || 'EMP-004'],
+          interviewerNames: [interviewerName],
+          venueMeetingLink: i.meetingLink || 'https://meet.google.com/isysware-interview',
+          status: statusMap[i.status] || i.status || 'Scheduled',
+          notes: i.notes || '',
+          evaluation: i.evaluation || null
+        }
+      })
+      recruitmentService._setItem('isysware_hrms_f03_interviews_v1', mappedInterviews)
     }
     recruitmentService._notify?.()
   } catch (err) {

@@ -263,7 +263,16 @@ export const attendanceService = {
           earlyExitMinutes: metrics.earlyExitMinutes,
           lateMinutes: metrics.lateMinutes,
           workArrangement: effectiveArrangement,
-          status: metrics.actualWorkMinutes >= (shift.halfDayThresholdMinutes || 240) ? 'PRESENT' : 'HALF_DAY'
+          // After a completed check-out, zero worked minutes must be HALF_DAY.
+          // Keep regular threshold rules unchanged for positive durations.
+          status: Number(metrics.actualWorkMinutes || 0) <= 0
+            ? 'HALF_DAY'
+            : (Number(metrics.actualWorkMinutes) >= Number(
+                shift.halfDayThresholdMinutes ||
+                (shift.type === 'PART_TIME' || (shift.fullDayTargetMinutes && shift.fullDayTargetMinutes < 480)
+                  ? Math.floor((shift.fullDayTargetMinutes || 240) / 2)
+                  : 240)
+              ) ? 'PRESENT' : 'HALF_DAY')
         }
       })
 
@@ -408,6 +417,12 @@ export const attendanceService = {
 
         if (existingRecord) {
           rowStatus = existingRecord.status
+          // Read-only compatibility for older zero-hour completed records.
+          // Never reclassify an in-progress session with no check-out.
+          if (existingRecord.firstCheckIn && existingRecord.lastCheckOut &&
+              Number(existingRecord.actualWorkMinutes || 0) <= 0 && rowStatus === 'PRESENT') {
+            rowStatus = 'HALF_DAY'
+          }
           workedMinutes = existingRecord.actualWorkMinutes
           lateMin = existingRecord.lateMinutes
           earlyExitMin = existingRecord.earlyExitMinutes
@@ -654,6 +669,10 @@ export const attendanceService = {
 
       return {
         ...r,
+        // Align employee history with Attendance Register without altering punch audit.
+        status: r.firstCheckIn && r.lastCheckOut &&
+          Number(r.actualWorkMinutes || 0) <= 0 && r.status === 'PRESENT'
+          ? 'HALF_DAY' : r.status,
         workArrangement: finalArrangement,
         firstCheckInFormatted: r.firstCheckIn ? format12Hour(getKarachiTime(r.firstCheckIn)) : '--:--',
         lastCheckOutFormatted: r.lastCheckOut ? format12Hour(getKarachiTime(r.lastCheckOut)) : '--:--',

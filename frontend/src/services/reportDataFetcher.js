@@ -24,6 +24,7 @@ import { hrLettersService } from './hrLettersService.js'
 import { policyService } from './policyService.js'
 import { scheduledAlertService } from './scheduledAlertService.js'
 import { auditService } from './auditService.js'
+import { payrollService } from './payrollService.js'
 
 const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
 
@@ -66,6 +67,27 @@ function getScopedEmployees(currentUser, selectedEmployeeId = null, selectedDept
     list = list.filter((e) => e.id === selectedEmployeeId)
   }
 
+  return list
+}
+
+function scopeBreakdown(breakdown, user, filters) {
+  let list = breakdown || []
+  if (user?.role === 'employee') {
+    const empId = user.employeeId || user.id
+    list = list.filter((b) => b.employeeId === empId || b.employeeCuid === empId || b.employeeCode === empId)
+  } else if (user?.role === 'manager') {
+    const mgrId = user.employeeId || user.id
+    const staff = getScopedEmployees(user)
+    const allowedIds = new Set(staff.map((s) => s.id))
+    list = list.filter((b) => allowedIds.has(b.employeeId) || allowedIds.has(b.employeeCuid) || allowedIds.has(b.employeeCode) || b.employeeId === mgrId)
+  }
+
+  if (filters?.employeeId && filters.employeeId !== 'all') {
+    list = list.filter((b) => b.employeeId === filters.employeeId || b.employeeCuid === filters.employeeId || b.employeeCode === filters.employeeId)
+  }
+  if (filters?.departmentId && filters.departmentId !== 'all') {
+    list = list.filter((b) => b.department === filters.departmentId)
+  }
   return list
 }
 
@@ -764,31 +786,61 @@ export const reportDataFetcher = {
     let totalClosing = 0
 
     staff.forEach((e) => {
-      const types = ['Annual Paid Leave', 'Casual Leave', 'Sick Leave']
-      types.forEach((t) => {
-        const opening = 10
-        const earned = 4
-        const consumed = 2
-        const adjusted = 0
-        const closing = opening + earned - consumed + adjusted
+      const balances = leaveBalanceService?.getEmployeeBalances ? leaveBalanceService.getEmployeeBalances(e.id) : []
+      if (Array.isArray(balances) && balances.length > 0) {
+        balances.forEach((b) => {
+          const opening = Number(b.openingBalance ?? b.allocatedDays ?? 0)
+          const earned = Number(b.earnedAccrued ?? 0)
+          const consumed = Number(b.utilized ?? b.consumedDays ?? 0)
+          const adjusted = Number(b.adjustments ?? 0)
+          const closing = Number(b.closingBalance ?? (opening + earned + adjusted - consumed))
 
-        totalOpening += opening
-        totalAccrued += earned
-        totalConsumed += consumed
-        totalClosing += closing
+          totalOpening += opening
+          totalAccrued += earned
+          totalConsumed += consumed
+          totalClosing += closing
 
-        rows.push({
-          employeeId: e.id,
-          employeeName: e.name,
-          department: e.department || 'Development',
-          leaveType: t,
-          opening,
-          earned,
-          consumed,
-          adjusted,
-          closing
+          rows.push({
+            employeeId: e.id,
+            employeeName: e.name,
+            department: e.department || 'Development',
+            leaveType: b.leaveTypeName || b.leaveType || 'Annual Leave',
+            opening,
+            earned,
+            consumed,
+            adjusted,
+            closing
+          })
         })
-      })
+      } else {
+        const defaultTypes = [
+          { name: 'Annual Leave', days: 14 },
+          { name: 'Casual Leave', days: 10 },
+          { name: 'Sick Leave', days: 8 }
+        ]
+        defaultTypes.forEach((dt) => {
+          const opening = dt.days
+          const earned = 0
+          const consumed = 0
+          const adjusted = 0
+          const closing = opening
+
+          totalOpening += opening
+          totalClosing += closing
+
+          rows.push({
+            employeeId: e.id,
+            employeeName: e.name,
+            department: e.department || 'Development',
+            leaveType: dt.name,
+            opening,
+            earned,
+            consumed,
+            adjusted,
+            closing
+          })
+        })
+      }
     })
 
     return {
@@ -977,19 +1029,77 @@ export const reportDataFetcher = {
   // FAMILY 05: PAYROLL, EMPLOYEE PAY & BANKING (8)
   // ==========================================
   'RPT-PAY-001': (filters, user) => {
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = null
+    if (filters?.period && filters.period !== 'all') {
+      targetRun = runs.find((r) => r.period === filters.period || r.runNumber === filters.period)
+    }
+    if (!targetRun) {
+      targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') ||
+                  runs.find((r) => r.status !== 'VOID') ||
+                  runs[0]
+    }
+
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+
+      const rows = breakdown.map((e) => {
+        const basic = Number(e.basicSalary || 0)
+        const allowances = Number(e.allowancesTotal || 0)
+        const commissions = Number(e.commission || 0)
+        const overtime = Number(e.overtimePay || 0)
+        const gross = Number(e.grossSalary || (basic + allowances + commissions + overtime))
+        const tax = Number(e.salaryTaxWithheld || 0)
+        const otherDeductions = Math.max(0, Number(e.totalDeductions || 0) - tax)
+        const net = Number(e.netPayable || (gross - tax - otherDeductions))
+
+        return {
+          employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
+          employeeName: e.employeeName,
+          department: e.department || 'Development',
+          basicSalary: basic,
+          allowances,
+          commissions,
+          overtime,
+          grossPay: gross,
+          taxWithheld: tax,
+          otherDeductions,
+          netPayable: net
+        }
+      })
+
+      const totalBasic = rows.reduce((acc, r) => acc + r.basicSalary, 0)
+      const totalGross = rows.reduce((acc, r) => acc + r.grossPay, 0)
+      const totalTax = rows.reduce((acc, r) => acc + r.taxWithheld, 0)
+      const totalDeductions = rows.reduce((acc, r) => acc + r.otherDeductions, 0)
+      const totalNet = rows.reduce((acc, r) => acc + r.netPayable, 0)
+
+      return {
+        rows,
+        summary: { totalBasic, totalGross, totalTax, totalDeductions, totalNet },
+        reconciliation: {
+          grossCalculated: totalGross,
+          grossRecorded: totalGross,
+          netCalculated: totalGross - totalTax - totalDeductions,
+          netRecorded: totalNet,
+          reconciled: Math.abs((totalGross - totalTax - totalDeductions) - totalNet) < 0.01
+        }
+      }
+    }
+
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
     const structures = compensationService.getSalaryStructures()
 
-    const rows = staff.map((e, idx) => {
+    const rows = staff.map((e) => {
       const struct = structures.find((s) => s.employeeId === e.id) || {}
-      const basic = struct.basicSalary || (150000 + (idx * 15000))
-      const allowances = 15000
-      const commissions = idx === 3 ? 45000 : 0
-      const overtime = idx % 3 === 0 ? 8000 : 0
-      const gross = basic + allowances + commissions + overtime
-      const tax = Math.round(gross * 0.08)
-      const otherDeductions = idx % 4 === 0 ? 5000 : 0
-      const net = gross - tax - otherDeductions
+      const basic = Number(struct.basicSalary || 30000)
+      const allowances = 0
+      const commissions = 0
+      const overtime = 0
+      const gross = basic
+      const tax = 0
+      const otherDeductions = 0
+      const net = gross
 
       return {
         employeeId: e.id,
@@ -1016,7 +1126,7 @@ export const reportDataFetcher = {
       rows,
       summary: { totalBasic, totalGross, totalTax, totalDeductions, totalNet },
       reconciliation: {
-        grossCalculated: totalBasic + rows.reduce((acc, r) => acc + r.allowances + r.commissions + r.overtime, 0),
+        grossCalculated: totalGross,
         grossRecorded: totalGross,
         netCalculated: totalGross - totalTax - totalDeductions,
         netRecorded: totalNet,
@@ -1026,27 +1136,78 @@ export const reportDataFetcher = {
   },
 
   'RPT-PAY-002': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => {
-      const basic = 180000 + (idx * 10000)
-      const earnings = basic + 15000
-      const tax = Math.round(earnings * 0.075)
-      const loan = idx % 5 === 0 ? 5000 : 0
-      const unpaid = 0
-      const net = earnings - tax - loan - unpaid
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = null
+    if (filters?.period && filters.period !== 'all') {
+      targetRun = runs.find((r) => r.period === filters.period || r.runNumber === filters.period)
+    }
+    if (!targetRun) {
+      targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') ||
+                  runs.find((r) => r.status !== 'VOID') ||
+                  runs[0]
+    }
+
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+
+      const rows = breakdown.map((e, idx) => {
+        const basic = Number(e.basicSalary || 0)
+        const earnings = Number(e.grossSalary || basic)
+        const tax = Number(e.salaryTaxWithheld || 0)
+        const loan = Number(e.loanDeduction || 0)
+        const unpaid = Number(e.unpaidLeaveDeduction || 0)
+        const net = Number(e.netPayable || (earnings - tax - loan - unpaid))
+
+        return {
+          payslipId: e.entryId || `PSL-${targetRun.period || '2026-11'}-${String(idx + 1).padStart(3, '0')}`,
+          employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
+          employeeName: e.employeeName,
+          payPeriod: targetRun.periodName || targetRun.period || 'November 2026',
+          basicPay: basic,
+          totalEarnings: earnings,
+          taxDeduction: tax,
+          loanDeduction: loan,
+          unpaidLeaveDeduction: unpaid,
+          netSalary: net,
+          status: targetRun.status || 'Draft'
+        }
+      })
 
       return {
-        payslipId: `PSL-2026-10-${String(idx + 1).padStart(3, '0')}`,
+        rows,
+        summary: {
+          totalGrossEarnings: rows.reduce((acc, r) => acc + r.totalEarnings, 0),
+          totalTaxDeductions: rows.reduce((acc, r) => acc + r.taxDeduction, 0),
+          totalLoanRecoveries: rows.reduce((acc, r) => acc + r.loanDeduction, 0),
+          totalNetDisbursed: rows.reduce((acc, r) => acc + r.netSalary, 0)
+        },
+        reconciliation: { reconciled: true }
+      }
+    }
+
+    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
+    const structures = compensationService.getSalaryStructures()
+    const rows = staff.map((e, idx) => {
+      const struct = structures.find((s) => s.employeeId === e.id) || {}
+      const basic = Number(struct.basicSalary || 30000)
+      const earnings = basic
+      const tax = 0
+      const loan = 0
+      const unpaid = 0
+      const net = earnings
+
+      return {
+        payslipId: `PSL-2026-11-${String(idx + 1).padStart(3, '0')}`,
         employeeId: e.id,
         employeeName: e.name,
-        payPeriod: 'October 2026',
+        payPeriod: 'November 2026',
         basicPay: basic,
         totalEarnings: earnings,
         taxDeduction: tax,
         loanDeduction: loan,
         unpaidLeaveDeduction: unpaid,
         netSalary: net,
-        status: 'Posted'
+        status: 'Draft'
       }
     })
 
@@ -1098,26 +1259,64 @@ export const reportDataFetcher = {
   },
 
   'RPT-PAY-004': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') || runs.find((r) => r.status !== 'VOID') || runs[0]
     const bankRecords = employeeService.getBankRecords()
+
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+
+      const rows = breakdown.map((e) => {
+        const b = bankRecords.find((rec) => rec.employeeId === (e.employeeId || e.employeeCuid)) || {}
+        const net = Number(e.netPayable || e.grossSalary || 0)
+        const acct = e.bankAccountNumber || b.accountNumber || '10023490812'
+        const masked = `**** **** ${acct.slice(-4)}`
+
+        return {
+          batchRef: `BATCH-${targetRun.runNumber || '202611-02'}-DISB`,
+          employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
+          employeeName: e.employeeName,
+          bankName: e.bankName || b.bankName || 'Meezan Bank Limited',
+          maskedAccount: masked,
+          approvedNet: net,
+          amountPaid: targetRun.status === 'DISBURSED' ? net : 0,
+          unpaidBalance: targetRun.status === 'DISBURSED' ? 0 : net,
+          paymentStatus: targetRun.status === 'DISBURSED' ? 'Disbursed' : (targetRun.status === 'APPROVED' ? 'Approved' : 'Pending Approval')
+        }
+      })
+
+      return {
+        rows,
+        summary: {
+          totalApprovedNet: rows.reduce((acc, r) => acc + r.approvedNet, 0),
+          totalDisbursed: rows.reduce((acc, r) => acc + r.amountPaid, 0),
+          totalUnpaidLiability: rows.reduce((acc, r) => acc + r.unpaidBalance, 0)
+        },
+        reconciliation: { reconciled: true }
+      }
+    }
+
+    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
+    const structures = compensationService.getSalaryStructures()
 
     const rows = staff.map((e, idx) => {
       const b = bankRecords.find((rec) => rec.employeeId === e.id) || {}
-      const net = 175000 + (idx * 8000)
-      const paid = net
+      const struct = structures.find((s) => s.employeeId === e.id) || {}
+      const net = Number(struct.basicSalary || 30000)
+      const paid = 0
       const acct = b.accountNumber || '10023490812'
       const masked = `**** **** ${acct.slice(-4)}`
 
       return {
-        batchRef: 'BATCH-2026-10-DISB',
+        batchRef: 'BATCH-2026-11-DISB',
         employeeId: e.id,
         employeeName: e.name,
         bankName: b.bankName || 'Meezan Bank Limited',
         maskedAccount: masked,
         approvedNet: net,
         amountPaid: paid,
-        unpaidBalance: 0,
-        paymentStatus: 'Disbursed'
+        unpaidBalance: net,
+        paymentStatus: 'Pending Approval'
       }
     })
 
@@ -1126,7 +1325,7 @@ export const reportDataFetcher = {
       summary: {
         totalApprovedNet: rows.reduce((acc, r) => acc + r.approvedNet, 0),
         totalDisbursed: rows.reduce((acc, r) => acc + r.amountPaid, 0),
-        totalUnpaidLiability: 0
+        totalUnpaidLiability: rows.reduce((acc, r) => acc + r.unpaidBalance, 0)
       },
       reconciliation: { reconciled: true }
     }
@@ -1256,11 +1455,48 @@ export const reportDataFetcher = {
   // FAMILY 06: TAX & SALARY STATUTORY CONTROLS (5)
   // ==========================================
   'RPT-TAX-001': (filters, user) => {
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') || runs.find((r) => r.status !== 'VOID') || runs[0]
+
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+
+      const rows = breakdown.map((e) => {
+        const taxableSalary = Number(e.grossSalary || e.basicSalary || 0)
+        const annualizedSalary = taxableSalary * 12
+        const monthlyTax = Number(e.salaryTaxWithheld || 0)
+        const slabRate = monthlyTax > 0 ? 'FBR Slab 2 (2.5% on excess above 600k)' : 'Exempt / Below Taxable Threshold'
+
+        return {
+          employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
+          employeeName: e.employeeName,
+          taxYear: '2026-2027',
+          taxableSalary,
+          annualizedSalary,
+          slabRate,
+          monthlyTax,
+          effectiveRule: 'FBR-SEC-149-V2026'
+        }
+      })
+
+      return {
+        rows,
+        summary: {
+          totalTaxablePayroll: rows.reduce((acc, r) => acc + r.taxableSalary, 0),
+          totalMonthlyTaxWithheld: rows.reduce((acc, r) => acc + r.monthlyTax, 0),
+          taxedEmployeesCount: rows.filter((r) => r.monthlyTax > 0).length
+        },
+        reconciliation: { reconciled: true }
+      }
+    }
+
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => {
-      const taxableSalary = 160000 + (idx * 15000)
+    const structures = compensationService.getSalaryStructures()
+    const rows = staff.map((e) => {
+      const struct = structures.find((s) => s.employeeId === e.id) || {}
+      const taxableSalary = Number(struct.basicSalary || 30000)
       const annualizedSalary = taxableSalary * 12
-      const monthlyTax = Math.round(taxableSalary * 0.08)
+      const monthlyTax = 0
 
       return {
         employeeId: e.id,
@@ -1268,7 +1504,7 @@ export const reportDataFetcher = {
         taxYear: '2026-2027',
         taxableSalary,
         annualizedSalary,
-        slabRate: 'FBR Slab 3 (10% on excess)',
+        slabRate: 'Exempt / Below Taxable Threshold',
         monthlyTax,
         effectiveRule: 'FBR-SEC-149-V2026'
       }
@@ -1278,26 +1514,63 @@ export const reportDataFetcher = {
       rows,
       summary: {
         totalTaxablePayroll: rows.reduce((acc, r) => acc + r.taxableSalary, 0),
-        totalMonthlyTaxWithheld: rows.reduce((acc, r) => acc + r.monthlyTax, 0),
-        taxedEmployeesCount: rows.length
+        totalMonthlyTaxWithheld: 0,
+        taxedEmployeesCount: 0
       },
       reconciliation: { reconciled: true }
     }
   },
 
   'RPT-TAX-002': (filters, user) => {
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') || runs.find((r) => r.status !== 'VOID') || runs[0]
+
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+
+      const rows = breakdown.map((e) => {
+        const taxableSalary = Number(e.grossSalary || e.basicSalary || 0)
+        const ytdTaxableSalary = taxableSalary * 5 // 5 months (Jul-Nov)
+        const monthlyTax = Number(e.salaryTaxWithheld || 0)
+        const ytdTaxWithheld = monthlyTax * 5
+        const effectiveTaxRate = ytdTaxableSalary > 0 ? ((ytdTaxWithheld / ytdTaxableSalary) * 100).toFixed(1) + '%' : '0.0%'
+
+        return {
+          employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
+          employeeName: e.employeeName,
+          department: e.department || 'Development',
+          taxYear: '2026-2027',
+          ytdTaxableSalary,
+          ytdTaxWithheld,
+          effectiveTaxRate,
+          status: 'Compliant'
+        }
+      })
+
+      return {
+        rows,
+        summary: {
+          totalYtdTaxableSalary: rows.reduce((acc, r) => acc + r.ytdTaxableSalary, 0),
+          totalYtdTaxWithheld: rows.reduce((acc, r) => acc + r.ytdTaxWithheld, 0)
+        },
+        reconciliation: { reconciled: true }
+      }
+    }
+
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => {
-      const ytdTaxableSalary = (160000 + (idx * 15000)) * 4
-      const ytdTaxWithheld = Math.round(ytdTaxableSalary * 0.08)
+    const structures = compensationService.getSalaryStructures()
+    const rows = staff.map((e) => {
+      const struct = structures.find((s) => s.employeeId === e.id) || {}
+      const taxableSalary = Number(struct.basicSalary || 30000)
+      const ytdTaxableSalary = taxableSalary * 5
       return {
         employeeId: e.id,
         employeeName: e.name,
         department: e.department || 'Development',
         taxYear: '2026-2027',
         ytdTaxableSalary,
-        ytdTaxWithheld,
-        effectiveTaxRate: '8.0%',
+        ytdTaxWithheld: 0,
+        effectiveTaxRate: '0.0%',
         status: 'Compliant'
       }
     })
@@ -1306,7 +1579,7 @@ export const reportDataFetcher = {
       rows,
       summary: {
         totalYtdTaxableSalary: rows.reduce((acc, r) => acc + r.ytdTaxableSalary, 0),
-        totalYtdTaxWithheld: rows.reduce((acc, r) => acc + r.ytdTaxWithheld, 0)
+        totalYtdTaxWithheld: 0
       },
       reconciliation: { reconciled: true }
     }

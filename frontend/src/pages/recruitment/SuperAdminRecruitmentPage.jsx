@@ -314,8 +314,12 @@ export function SuperAdminRecruitmentPage() {
   }
 
   // Handlers for Interviews
-  const handleScheduleInterview = (data) => {
-    recruitmentService.scheduleInterview(data, currentUser.name)
+  const handleScheduleInterview = async (data) => {
+    if (recruitmentService.scheduleInterviewAsync) {
+      await recruitmentService.scheduleInterviewAsync(data, currentUser.name)
+    } else {
+      recruitmentService.scheduleInterview(data, currentUser.name)
+    }
   }
 
   const handleSubmitEvaluation = (interviewId, evalData) => {
