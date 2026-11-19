@@ -491,3 +491,30 @@ export function fmtDate(value) {
   if (Number.isNaN(date.getTime())) return String(value)
   return date.toLocaleDateString('en-GB', { timeZone: 'Asia/Karachi' })
 }
+
+/**
+ * Formats late or early arrival/exit minutes into human-readable duration format.
+ * Examples:
+ *  - 443 minutes, 'Late' -> '7h 23m Late'
+ *  - 60 minutes, 'Late'  -> '1h Late'
+ *  - 13 minutes, 'Late'  -> '13m Late'
+ *  - 97 minutes, 'Early' -> '1h 37m Early'
+ *  - 0 minutes, 'Late'   -> '0m Late'
+ *
+ * @param {number|string} minutes
+ * @param {string} label - 'Late' or 'Early'
+ * @returns {string}
+ */
+export function formatLateDuration(minutes, label = 'Late') {
+  const m = Math.max(0, parseInt(minutes, 10) || 0)
+  if (m === 0) return `0m ${label}`
+  const hours = Math.floor(m / 60)
+  const remMinutes = m % 60
+  if (hours > 0 && remMinutes > 0) {
+    return `${hours}h ${remMinutes}m ${label}`
+  }
+  if (hours > 0) {
+    return `${hours}h ${label}`
+  }
+  return `${remMinutes}m ${label}`
+}

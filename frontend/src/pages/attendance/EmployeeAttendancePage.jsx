@@ -15,7 +15,7 @@ import WfhFieldDutyDetailModal from '@/components/attendance/WfhFieldDutyDetailM
 import StatusBadge from '@/components/common/StatusBadge'
 import Button from '@/components/common/Button'
 import AppIcon from '@/components/common/AppIcon'
-import { getKarachiToday, formatTimeTo12Hour } from '@/lib/dateUtils'
+import { getKarachiToday, formatTimeTo12Hour, formatLateDuration } from '@/lib/dateUtils'
 
 export function EmployeeAttendancePage() {
   const { user } = useAuth()
@@ -250,11 +250,11 @@ export function EmployeeAttendancePage() {
                       <td className="p-3">
                         {r.isLate ? (
                           <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            +{r.lateMinutes}m Late
+                            {formatLateDuration(r.lateMinutes, 'Late')}
                           </span>
                         ) : r.isEarlyExit ? (
                           <span className="text-[10px] font-bold text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                            -{r.earlyExitMinutes}m Early
+                            {formatLateDuration(r.earlyExitMinutes, 'Early')}
                           </span>
                         ) : (
                           <span className="text-[11px] text-slate-400">On-Time</span>

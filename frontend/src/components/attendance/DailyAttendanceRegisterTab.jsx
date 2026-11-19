@@ -4,7 +4,7 @@ import StatusBadge from '@/components/common/StatusBadge'
 import Modal from '@/components/common/Modal'
 import { attendanceService } from '@/services/attendanceService'
 import { shiftService } from '@/services/shiftService'
-import { getKarachiToday, getDateFilterRange, formatTimeTo12Hour } from '@/lib/dateUtils'
+import { getKarachiToday, getDateFilterRange, formatTimeTo12Hour, formatLateDuration } from '@/lib/dateUtils'
 import apiClient from '@/services/apiClient'
 
 export function DailyAttendanceRegisterTab({
@@ -330,12 +330,12 @@ export function DailyAttendanceRegisterTab({
                       {r.isLate ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                           <AppIcon name="warning" className="w-2.5 h-2.5" />
-                          +{r.lateMinutes}m Late
+                          {formatLateDuration(r.lateMinutes, 'Late')}
                         </span>
                       ) : r.isEarlyExit ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
                           <AppIcon name="warning" className="w-2.5 h-2.5" />
-                          -{r.earlyExitMinutes}m Early
+                          {formatLateDuration(r.earlyExitMinutes, 'Early')}
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-400">—</span>

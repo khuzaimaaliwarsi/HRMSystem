@@ -3,7 +3,7 @@ import AppIcon from '@/components/common/AppIcon'
 import StatusBadge from '@/components/common/StatusBadge'
 import Button from '@/components/common/Button'
 import Alert from '@/components/common/Alert'
-import { getKarachiToday, getKarachiTimeString, formatTimeTo12Hour } from '@/lib/dateUtils'
+import { getKarachiToday, getKarachiTimeString, formatTimeTo12Hour, formatLateDuration } from '@/lib/dateUtils'
 import { shiftService } from '@/services/shiftService'
 
 export function CheckInOutWidget({
@@ -166,7 +166,7 @@ export function CheckInOutWidget({
               </span>
               {currentRecord?.isLate && (
                 <span className="block text-[10px] text-amber-700 font-bold">
-                  +{currentRecord.lateMinutes}m Late
+                  {formatLateDuration(currentRecord.lateMinutes, 'Late')}
                 </span>
               )}
             </div>
@@ -177,7 +177,7 @@ export function CheckInOutWidget({
               </span>
               {currentRecord?.isEarlyExit && (
                 <span className="block text-[10px] text-rose-700 font-bold">
-                  -{currentRecord.earlyExitMinutes}m Early
+                  {formatLateDuration(currentRecord.earlyExitMinutes, 'Early')}
                 </span>
               )}
             </div>
