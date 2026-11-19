@@ -21,13 +21,14 @@ export function getKarachiDate(date = new Date()) {
  * @param {Date|string|number} [date=new Date()]
  * @returns {string} HH:MM
  */
-export function getKarachiTime(date = new Date()) {
+export function getKarachiTime(date = new Date(), includeSeconds = false) {
   const d = new Date(date)
   return d.toLocaleTimeString('en-GB', {
     timeZone: TIMEZONE,
     hour12: false,
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: includeSeconds ? '2-digit' : undefined
   })
 }
 
@@ -64,15 +65,17 @@ export function minutesToTime(totalMinutes) {
  */
 export function format12Hour(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return '--:--'
-  const [hStr, mStr] = timeStr.split(':')
+  const [hStr, mStr, sStr] = timeStr.split(':')
   let hours = parseInt(hStr, 10)
   const minutes = mStr ? mStr.slice(0, 2) : '00'
+  const seconds = sStr ? sStr.slice(0, 2) : null
 
   if (isNaN(hours)) return timeStr
 
   const period = hours >= 12 ? 'PM' : 'AM'
   hours = hours % 12 || 12
-  return `${String(hours).padStart(2, '0')}:${minutes} ${period}`
+  const secPart = seconds ? `:${seconds}` : ''
+  return `${String(hours).padStart(2, '0')}:${minutes}${secPart} ${period}`
 }
 
 /**

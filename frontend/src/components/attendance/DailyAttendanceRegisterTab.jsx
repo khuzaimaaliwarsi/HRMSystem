@@ -65,13 +65,13 @@ export function DailyAttendanceRegisterTab({
     setSelectedRecordForDetail(detailObj)
 
     // Fetch live authoritative punches from backend API
-    const recId = r.attendanceRecordId || r.cuid
+    const recId = r.attendanceRecordId || r.cuid || (r.id && !String(r.id).startsWith('ATT-') ? r.id : null)
     if (recId) {
       try {
         const res = await apiClient.get(`/attendance/records/${recId}/punches`)
         const livePunches = res?.punches || res?.data?.punches
         if (Array.isArray(livePunches) && livePunches.length > 0) {
-          setSelectedRecordForDetail(prev => prev && prev.id === r.id ? { ...prev, punches: livePunches } : prev)
+          setSelectedRecordForDetail((prev) => (prev ? { ...prev, punches: livePunches } : prev))
         }
       } catch (_) {}
     }
@@ -80,6 +80,7 @@ export function DailyAttendanceRegisterTab({
   useEffect(() => {
     if (selectedDate) {
       attendanceService.syncScheduledAttendance(selectedDate)
+      attendanceService.syncDailyRegister?.(selectedDate)
       onDateChange?.(selectedDate)
     }
   }, [selectedDate, onDateChange])
@@ -409,12 +410,20 @@ export function DailyAttendanceRegisterTab({
               <div>
                 <span className="text-slate-500 text-[11px]">Check-In / Out:</span>
                 <div className="font-mono font-bold text-slate-800">
-                  {selectedRecordForDetail.checkInTime ? formatTimeTo12Hour(selectedRecordForDetail.checkInTime) : '—'} / {selectedRecordForDetail.checkOutTime ? formatTimeTo12Hour(selectedRecordForDetail.checkOutTime) : '—'}
+                  {selectedRecordForDetail.checkInTime
+                    ? formatTimeTo12Hour(selectedRecordForDetail.checkInTime)
+                    : ((selectedRecordForDetail.checkIn && selectedRecordForDetail.checkIn !== '--:--') ? formatTimeTo12Hour(selectedRecordForDetail.checkIn) : '—')} / {selectedRecordForDetail.checkOutTime
+                    ? formatTimeTo12Hour(selectedRecordForDetail.checkOutTime)
+                    : ((selectedRecordForDetail.checkOut && selectedRecordForDetail.checkOut !== '--:--') ? formatTimeTo12Hour(selectedRecordForDetail.checkOut) : '—')}
                 </div>
               </div>
               <div>
                 <span className="text-slate-500 text-[11px]">Worked Hours:</span>
-                <div className="font-mono font-bold text-hrms-primary">{selectedRecordForDetail.workedHours} hrs</div>
+                <div className="font-mono font-bold text-hrms-primary">
+                  {typeof selectedRecordForDetail.workedHours === 'string' && selectedRecordForDetail.workedHours.includes('h')
+                    ? selectedRecordForDetail.workedHours
+                    : `${parseFloat(selectedRecordForDetail.workedHours || 0).toFixed(1)} hrs`}
+                </div>
               </div>
             </div>
 

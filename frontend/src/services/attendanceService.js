@@ -414,9 +414,22 @@ class AttendanceService {
           recChanged = true
         }
 
-        // HEAL 2: Premature Absent Classification Fix
-        // If there is no punch and not an excused status (leave, holiday, off, WFH, Field Duty):
-        if (!existing.checkInTime && !['Weekly Off', 'Holiday', 'On Leave', 'Approved Leave', 'WFH', 'Field Duty'].includes(existing.status)) {
+        // HEAL 2: Premature Absent Classification Fix & Punch Status Protection
+        const hasPunchOrCheckIn = Boolean(existing.checkInTime || (existing.checkIn && existing.checkIn !== '--:--') || (existing.punches && existing.punches.length > 0))
+        if (hasPunchOrCheckIn) {
+          const workedHoursNum = parseFloat(existing.workedHours || 0)
+          const isZeroHourSession = Boolean(
+            (existing.checkInTime || (existing.checkIn && existing.checkIn !== '--:--')) &&
+            (existing.checkOutTime || (existing.checkOut && existing.checkOut !== '--:--')) &&
+            workedHoursNum <= 0
+          )
+          if (isZeroHourSession) {
+            existing.status = 'Half Day'
+            existing.primaryClassification = 'Half Day'
+            existing.isHalfDay = true
+            recChanged = true
+          }
+        } else if (!['Weekly Off', 'Holiday', 'On Leave', 'Approved Leave', 'WFH', 'Field Duty'].includes(existing.status)) {
           const isFutureOrTestDate = isFutureDate || (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && targetDate === '2026-11-05')
           if (isFutureOrTestDate) {
             if (existing.status !== 'Scheduled') {
@@ -553,6 +566,20 @@ class AttendanceService {
     }
 
     return list
+  }
+
+  /**
+   * Proactively synchronizes daily attendance register for a specific date from PostgreSQL backend.
+   */
+  async syncDailyRegister(targetDate) {
+    if (!targetDate) return []
+    try {
+      const { syncDailyRegister } = await import('./backendSync.js')
+      if (typeof syncDailyRegister === 'function') {
+        return await syncDailyRegister(targetDate)
+      }
+    } catch (_) {}
+    return []
   }
 
   getAttendanceRecords(filters = {}, requestingUser = null) {

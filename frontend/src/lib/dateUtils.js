@@ -233,19 +233,44 @@ export function normalizeTimeTo24Hour(timeInput) {
  */
 export function formatTimeTo12Hour(timeInput) {
   if (!timeInput) return ''
+  if (timeInput instanceof Date) {
+    return getKarachiTime(timeInput, { hour12: true, seconds: true })
+  }
   const str = String(timeInput).trim()
-  if (!str || str === '—' || str === '-' || str === 'None' || str === '— : —') return str
+  if (!str || str === '—' || str === '-' || str === 'None' || str === '— : —' || str === '--:--') return str
 
-  // Check if it already has AM/PM
-  const matchWithAmPm = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i)
+  // If ISO date string in UTC/Z, convert to Asia/Karachi (PKT UTC+5)
+  if (str.includes('T') || str.endsWith('Z')) {
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) {
+      return getKarachiTime(d, { hour12: true, seconds: true })
+    }
+  }
+
+  // Check if it already has AM/PM (with optional seconds)
+  const matchWithAmPm = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i)
   if (matchWithAmPm) {
     const h = parseInt(matchWithAmPm[1], 10)
     const m = matchWithAmPm[2]
-    const p = matchWithAmPm[3].toUpperCase()
-    return `${String(h).padStart(2, '0')}:${m} ${p}`
+    const s = matchWithAmPm[3]
+    const p = matchWithAmPm[4].toUpperCase()
+    const secPart = s ? `:${s}` : ''
+    return `${String(h).padStart(2, '0')}:${m}${secPart} ${p}`
   }
 
-  // Parse 24-hour format
+  // Check for 24-hour with optional seconds: HH:MM:SS
+  const match24Sec = str.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
+  if (match24Sec) {
+    let h = parseInt(match24Sec[1], 10)
+    const m = match24Sec[2]
+    const s = match24Sec[3]
+    const period = h >= 12 ? 'PM' : 'AM'
+    let displayHour = h % 12
+    if (displayHour === 0) displayHour = 12
+    return `${String(displayHour).padStart(2, '0')}:${m}:${s} ${period}`
+  }
+
+  // Parse standard 24-hour format
   const norm24 = normalizeTimeTo24Hour(str)
   if (!norm24 || !norm24.includes(':')) return str
 

@@ -427,10 +427,10 @@ export const attendanceService = {
           lateMin = existingRecord.lateMinutes
           earlyExitMin = existingRecord.earlyExitMinutes
           if (existingRecord.firstCheckIn) {
-            checkInFormatted = format12Hour(getKarachiTime(existingRecord.firstCheckIn))
+            checkInFormatted = format12Hour(getKarachiTime(existingRecord.firstCheckIn, true))
           }
           if (existingRecord.lastCheckOut) {
-            checkOutFormatted = format12Hour(getKarachiTime(existingRecord.lastCheckOut))
+            checkOutFormatted = format12Hour(getKarachiTime(existingRecord.lastCheckOut, true))
           }
           if (existingRecord.corrections?.length > 0) {
             hasPendingCorrection = true
@@ -497,8 +497,9 @@ export const attendanceService = {
           id: p.id,
           type: p.punchType === 'CHECK_IN' ? 'IN' : p.punchType === 'CHECK_OUT' ? 'OUT' : (String(p.punchType).includes('IN') ? 'IN' : 'OUT'),
           punchType: p.punchType,
-          timestamp: format12Hour(getKarachiTime(p.punchTime)),
-          punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime)),
+          punchTime: p.punchTime,
+          timestamp: format12Hour(getKarachiTime(p.punchTime, true)),
+          punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime, true)),
           source: p.source || 'WEB',
           verified: true,
           notes: p.notes || null
@@ -511,8 +512,9 @@ export const attendanceService = {
               id: `${existingRecord.id}-in`,
               type: 'IN',
               punchType: 'CHECK_IN',
-              timestamp: format12Hour(getKarachiTime(existingRecord.firstCheckIn)),
-              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.firstCheckIn)),
+              punchTime: existingRecord.firstCheckIn,
+              timestamp: format12Hour(getKarachiTime(existingRecord.firstCheckIn, true)),
+              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.firstCheckIn, true)),
               source: 'WEB',
               verified: true,
               notes: 'Recorded Check-In'
@@ -523,8 +525,9 @@ export const attendanceService = {
               id: `${existingRecord.id}-out`,
               type: 'OUT',
               punchType: 'CHECK_OUT',
-              timestamp: format12Hour(getKarachiTime(existingRecord.lastCheckOut)),
-              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.lastCheckOut)),
+              punchTime: existingRecord.lastCheckOut,
+              timestamp: format12Hour(getKarachiTime(existingRecord.lastCheckOut, true)),
+              punchTimeFormatted: format12Hour(getKarachiTime(existingRecord.lastCheckOut, true)),
               source: 'WEB',
               verified: true,
               notes: 'Recorded Check-Out'
@@ -701,8 +704,9 @@ export const attendanceService = {
       id: p.id,
       type: p.punchType === 'CHECK_IN' ? 'IN' : p.punchType === 'CHECK_OUT' ? 'OUT' : (String(p.punchType).includes('IN') ? 'IN' : 'OUT'),
       punchType: p.punchType,
-      timestamp: format12Hour(getKarachiTime(p.punchTime)),
-      punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime)),
+      punchTime: p.punchTime,
+      timestamp: format12Hour(getKarachiTime(p.punchTime, true)),
+      punchTimeFormatted: format12Hour(getKarachiTime(p.punchTime, true)),
       source: p.source || 'WEB',
       verified: true,
       notes: p.notes || null
@@ -714,8 +718,9 @@ export const attendanceService = {
           id: `${record.id}-in`,
           type: 'IN',
           punchType: 'CHECK_IN',
-          timestamp: format12Hour(getKarachiTime(record.firstCheckIn)),
-          punchTimeFormatted: format12Hour(getKarachiTime(record.firstCheckIn)),
+          punchTime: record.firstCheckIn,
+          timestamp: format12Hour(getKarachiTime(record.firstCheckIn, true)),
+          punchTimeFormatted: format12Hour(getKarachiTime(record.firstCheckIn, true)),
           source: 'WEB',
           verified: true,
           notes: 'Recorded Check-In'
@@ -726,8 +731,9 @@ export const attendanceService = {
           id: `${record.id}-out`,
           type: 'OUT',
           punchType: 'CHECK_OUT',
-          timestamp: format12Hour(getKarachiTime(record.lastCheckOut)),
-          punchTimeFormatted: format12Hour(getKarachiTime(record.lastCheckOut)),
+          punchTime: record.lastCheckOut,
+          timestamp: format12Hour(getKarachiTime(record.lastCheckOut, true)),
+          punchTimeFormatted: format12Hour(getKarachiTime(record.lastCheckOut, true)),
           source: 'WEB',
           verified: true,
           notes: 'Recorded Check-Out'

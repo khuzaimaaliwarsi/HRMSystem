@@ -200,6 +200,184 @@ function normalizeShiftTypeFromBackend(type, isNightShift = false, name = '') {
 }
 
 /**
+ * Maps a single backend register row into authoritative frontend attendance record schema.
+ * STRICT: Keeps WFH / Field Duty work arrangement decoupled from status (HALF_DAY, PRESENT, ABSENT).
+ */
+export function mapBackendRegisterRow(r, regDate) {
+  const empCode = r.employeeCode || r.employeeId
+  const checkInRaw = (r.checkIn && r.checkIn !== '--:--') ? r.checkIn : null
+  const checkOutRaw = (r.checkOut && r.checkOut !== '--:--') ? r.checkOut : null
+
+  const checkInTime = checkInRaw ? normalizeTimeTo24Hour(checkInRaw) : (r.checkInTime || null)
+  const checkOutTime = checkOutRaw ? normalizeTimeTo24Hour(checkOutRaw) : (r.checkOutTime || null)
+
+  const workedHoursNum = parseFloat(r.workedHours) || (r.workedMinutes ? r.workedMinutes / 60 : 0.0)
+  const isZeroHourSession = Boolean(checkInRaw && checkOutRaw && workedHoursNum <= 0)
+
+  // Status mapping: Preserve HALF_DAY strictly; zero-hour completed punches must be Half Day
+  const rawStatus = String(r.status || '').toUpperCase()
+  let status = 'Scheduled'
+  if (rawStatus === 'HALF_DAY' || rawStatus === 'HALF DAY' || isZeroHourSession) {
+    status = 'Half Day'
+  } else if (rawStatus === 'ON_LEAVE' || rawStatus === 'LEAVE') {
+    status = 'On Leave'
+  } else if (rawStatus === 'ABSENT') {
+    status = 'Absent'
+  } else if (rawStatus === 'PRESENT') {
+    status = 'Present'
+  } else if (rawStatus === 'WEEKLY_OFF') {
+    status = 'Weekly Off'
+  } else if (rawStatus === 'HOLIDAY') {
+    status = 'Holiday'
+  } else if (checkInTime) {
+    status = 'Present'
+  }
+
+  // Work arrangement mapping: strictly separate from status
+  const rawArr = String(r.workArrangement || '').toUpperCase()
+  let mappedArrangement = 'Office'
+  if (rawArr === 'FIELD_DUTY' || rawArr === 'FIELD DUTY') {
+    mappedArrangement = 'Field Duty'
+  } else if (rawArr === 'REMOTE_WFH' || rawArr === 'WFH') {
+    mappedArrangement = 'WFH'
+  }
+
+  // Fallback check against local WFH / Field Duty requests if not already set
+  if (mappedArrangement === 'Office') {
+    const wfhList = attendanceService.getWfhRequests() || []
+    const isWfh = wfhList.some(w =>
+      (w.employeeId === empCode || w.employeeId === r.employeeId) &&
+      (w.status === 'Approved' || w.status === 'APPROVED') &&
+      (w.requestedDate === regDate || (w.startDate && w.startDate.slice(0, 10) <= regDate && w.endDate && w.endDate.slice(0, 10) >= regDate))
+    )
+    if (isWfh) mappedArrangement = 'WFH'
+
+    const fdList = attendanceService.getFieldDutyRequests() || []
+    const isFd = fdList.some(f =>
+      (f.employeeId === empCode || f.employeeId === r.employeeId) &&
+      (f.status === 'Approved' || f.status === 'APPROVED') &&
+      (f.visitDate === regDate || (f.dutyDate && f.dutyDate.slice(0, 10) === regDate))
+    )
+    if (isFd) mappedArrangement = 'Field Duty'
+  }
+
+  const rawPunches = Array.isArray(r.punches) && r.punches.length > 0 ? r.punches.map(p => ({
+    id: p.id,
+    type: p.type || (p.punchType === 'CHECK_IN' ? 'IN' : p.punchType === 'CHECK_OUT' ? 'OUT' : 'IN'),
+    punchType: p.punchType || (p.type === 'IN' ? 'CHECK_IN' : 'CHECK_OUT'),
+    timestamp: p.timestamp || p.punchTimeFormatted || formatTimeTo12Hour(p.punchTime || checkInRaw),
+    punchTimeFormatted: p.punchTimeFormatted || p.timestamp || formatTimeTo12Hour(p.punchTime || checkInRaw),
+    punchTime: p.punchTime || null,
+    source: p.source || 'WEB',
+    verified: p.verified !== false,
+    notes: p.notes || null
+  })) : [
+    checkInRaw ? {
+      id: `${r.attendanceRecordId || empCode}-in`,
+      type: 'IN',
+      punchType: 'CHECK_IN',
+      timestamp: formatTimeTo12Hour(checkInRaw),
+      punchTimeFormatted: formatTimeTo12Hour(checkInRaw),
+      source: 'WEB',
+      verified: true
+    } : null,
+    checkOutRaw ? {
+      id: `${r.attendanceRecordId || empCode}-out`,
+      type: 'OUT',
+      punchType: 'CHECK_OUT',
+      timestamp: formatTimeTo12Hour(checkOutRaw),
+      punchTimeFormatted: formatTimeTo12Hour(checkOutRaw),
+      source: 'WEB',
+      verified: true
+    } : null
+  ].filter(Boolean)
+
+  let recordNotes = r.notes || null
+  if (!recordNotes) {
+    if (checkInRaw && checkOutRaw) {
+      recordNotes = `Shift completed (${workedHoursNum.toFixed(1)}h worked)`
+    } else if (checkInRaw) {
+      recordNotes = 'Shift in progress (Checked In)'
+    }
+  }
+
+  return {
+    id: r.attendanceRecordId || r.id || `ATT-${empCode}-${regDate}`,
+    cuid: r.attendanceRecordId || r.id,
+    attendanceRecordId: r.attendanceRecordId || r.id,
+    date: r.date || regDate,
+    attendanceDate: r.date || regDate,
+    employeeId: empCode,
+    employeeCode: empCode,
+    employeeCuid: r.employeeId,
+    employeeName: r.name || empCode,
+    department: r.department || '',
+    departmentName: r.department || '',
+    departmentId: r.departmentId || '',
+    designation: r.designation || '',
+    shift: r.shift || null,
+    shiftId: r.shift?.shiftCode || r.shift?.id || 'SHF-GEN',
+    shiftName: r.shift?.name || 'Standard Day Shift',
+    workArrangement: mappedArrangement,
+    checkIn: checkInRaw ? formatTimeTo12Hour(checkInRaw) : null,
+    checkOut: checkOutRaw ? formatTimeTo12Hour(checkOutRaw) : null,
+    checkInTime,
+    checkOutTime,
+    status,
+    primaryClassification: status,
+    isHalfDay: status === 'Half Day',
+    expectedHours: parseFloat(r.shift?.workHours) || 8.0,
+    workedHours: workedHoursNum,
+    workedMinutes: r.workedMinutes || Math.round(workedHoursNum * 60),
+    lateMinutes: r.lateMinutes || 0,
+    earlyExitMinutes: r.earlyExitMinutes || 0,
+    isLate: (r.lateMinutes || 0) > 0,
+    isEarlyExit: (r.earlyExitMinutes || 0) > 0,
+    hasPendingCorrection: Boolean(r.hasPendingCorrection),
+    punches: rawPunches,
+    notes: recordNotes
+  }
+}
+
+/**
+ * Synchronize daily attendance register for a specific date from authoritative PostgreSQL backend.
+ */
+export async function syncDailyRegister(targetDate = getKarachiToday()) {
+  if (!targetDate) return []
+  try {
+    const res = await apiClient.get(`/attendance/register?date=${targetDate}`)
+    const regPayload = res
+    const regDate = regPayload?.date || targetDate
+    const rawRegList = Array.isArray(regPayload) ? regPayload : (regPayload?.register || [])
+    if (rawRegList.length === 0) return []
+
+    const mappedRecords = rawRegList.map((r) => mapBackendRegisterRow(r, regDate))
+    const currentList = attendanceService.getAttendanceRecords() || []
+    const merged = [...currentList]
+    mappedRecords.forEach((newRec) => {
+      const idx = merged.findIndex(
+        (m) =>
+          (m.employeeId === newRec.employeeId || m.employeeCuid === newRec.employeeCuid || m.employeeCode === newRec.employeeCode) &&
+          (m.date === newRec.date || m.attendanceDate === newRec.date)
+      )
+      if (idx !== -1) {
+        merged[idx] = { ...merged[idx], ...newRec }
+      } else {
+        merged.unshift(newRec)
+      }
+    })
+    attendanceService.memoryStorage['isysware_hrms_f04_attendance_records_v1'] = merged
+    if (typeof attendanceService._setItem === 'function') {
+      attendanceService._setItem('isysware_hrms_f04_attendance_records_v1', merged)
+    }
+    attendanceService._notify()
+    return mappedRecords
+  } catch (err) {
+    return []
+  }
+}
+
+/**
  * 2. Synchronize Shifts & Attendance Register
  */
 export async function syncAttendanceAndShifts() {
@@ -284,96 +462,7 @@ export async function syncAttendanceAndShifts() {
     const regDate = regPayload?.date || (typeof getKarachiToday === 'function' ? getKarachiToday() : new Date().toISOString().slice(0, 10))
     const rawRegList = Array.isArray(regPayload) ? regPayload : (regPayload?.register || [])
     if (rawRegList.length > 0) {
-      const mappedRecords = rawRegList.map((r) => {
-        const empCode = r.employeeCode || r.employeeId
-        const checkInTime = (r.checkIn && r.checkIn !== '--:--')
-          ? normalizeTimeTo24Hour(r.checkIn)
-          : (r.checkInTime || null)
-        const checkOutTime = (r.checkOut && r.checkOut !== '--:--')
-          ? normalizeTimeTo24Hour(r.checkOut)
-          : (r.checkOutTime || null)
-        const isPresent = Boolean(checkInTime)
-        const status = isPresent ? 'Present' : (r.status === 'ABSENT' ? 'Absent' : (r.status === 'HALF_DAY' ? 'Half Day' : (r.status || 'Scheduled')))
-        const rawPunches = Array.isArray(r.punches) && r.punches.length > 0 ? r.punches : [
-          checkInTime ? {
-            id: `${r.attendanceRecordId || empCode}-in`,
-            type: 'IN',
-            timestamp: formatTimeTo12Hour(checkInTime),
-            source: 'WEB',
-            verified: true
-          } : null,
-          checkOutTime ? {
-            id: `${r.attendanceRecordId || empCode}-out`,
-            type: 'OUT',
-            timestamp: formatTimeTo12Hour(checkOutTime),
-            source: 'WEB',
-            verified: true
-          } : null
-        ].filter(Boolean)
-
-        let recordNotes = r.notes || null
-        if (!recordNotes) {
-          if (checkInTime && checkOutTime) {
-            recordNotes = `Shift completed (${(parseFloat(r.workedHours) || 0).toFixed(1)}h worked)`
-          } else if (checkInTime) {
-            recordNotes = 'Shift in progress (Checked In)'
-          }
-        }
-
-        const rawArrangement = r.workArrangement
-        let mappedArrangement = (rawArrangement === 'REMOTE_WFH' || rawArrangement === 'WFH')
-          ? 'WFH'
-          : (rawArrangement === 'FIELD_DUTY' ? 'Field Duty' : (rawArrangement || 'Office'))
-
-        // Fallback check against local WFH / Field Duty requests
-        if (mappedArrangement === 'Office') {
-          const wfhList = attendanceService.getWfhRequests() || []
-          const isWfh = wfhList.some(w =>
-            (w.employeeId === empCode || w.employeeId === r.employeeId) &&
-            (w.status === 'Approved' || w.status === 'APPROVED') &&
-            (w.requestedDate === regDate || (w.startDate && w.startDate.slice(0, 10) <= regDate && w.endDate && w.endDate.slice(0, 10) >= regDate))
-          )
-          if (isWfh) mappedArrangement = 'WFH'
-
-          const fdList = attendanceService.getFieldDutyRequests() || []
-          const isFd = fdList.some(f =>
-            (f.employeeId === empCode || f.employeeId === r.employeeId) &&
-            (f.status === 'Approved' || f.status === 'APPROVED') &&
-            (f.visitDate === regDate || (f.dutyDate && f.dutyDate.slice(0, 10) === regDate))
-          )
-          if (isFd) mappedArrangement = 'Field Duty'
-        }
-
-        return {
-          id: r.attendanceRecordId || r.id || `ATT-${empCode}-${regDate}`,
-          cuid: r.attendanceRecordId || r.id,
-          date: r.date || regDate,
-          attendanceDate: r.date || regDate,
-          employeeId: empCode,
-          employeeCode: empCode,
-          employeeCuid: r.employeeId,
-          employeeName: r.name || empCode,
-          department: r.department || '',
-          designation: r.designation || '',
-          workArrangement: mappedArrangement,
-          checkIn: r.checkIn && r.checkIn !== '--:--' ? r.checkIn : (checkInTime ? formatTimeTo12Hour(checkInTime) : null),
-          checkOut: r.checkOut && r.checkOut !== '--:--' ? r.checkOut : (checkOutTime ? formatTimeTo12Hour(checkOutTime) : null),
-          checkInTime,
-          checkOutTime,
-          status,
-          primaryClassification: status,
-          shiftId: r.shift?.shiftCode || r.shift?.id || 'SHF-GEN',
-          shiftName: r.shift?.name || 'Standard Day Shift',
-          expectedHours: parseFloat(r.shift?.workHours) || 8.0,
-          workedHours: parseFloat(r.workedHours) || (r.workedMinutes ? r.workedMinutes / 60 : 0.0),
-          workedMinutes: r.workedMinutes || 0,
-          lateMinutes: r.lateMinutes || 0,
-          earlyExitMinutes: r.earlyExitMinutes || 0,
-          hasPendingCorrection: Boolean(r.hasPendingCorrection),
-          punches: rawPunches,
-          notes: recordNotes
-        }
-      })
+      const mappedRecords = rawRegList.map((r) => mapBackendRegisterRow(r, regDate))
       const currentList = attendanceService.getAttendanceRecords() || []
       const merged = [...currentList]
       mappedRecords.forEach((newRec) => {
@@ -394,6 +483,10 @@ export async function syncAttendanceAndShifts() {
       }
       attendanceService._notify()
     }
+
+    // Proactively synchronize recent past working dates (2026-11-18, 2026-11-17)
+    const recentDates = ['2026-11-18', '2026-11-17'].filter((d) => d !== regDate)
+    await Promise.allSettled(recentDates.map((d) => syncDailyRegister(d)))
 
     if (corrRes.status === 'fulfilled' && Array.isArray(corrRes.value)) {
       const statusMap = { 'PENDING': 'Pending Review', 'APPROVED': 'Approved', 'REJECTED': 'Rejected' }
@@ -1755,6 +1848,8 @@ export default {
   syncAllModules,
   syncOrganization,
   syncAttendanceAndShifts,
+  syncDailyRegister,
+  mapBackendRegisterRow,
   syncLeaves,
   syncPayroll,
   syncExpenses,

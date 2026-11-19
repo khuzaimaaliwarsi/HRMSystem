@@ -479,8 +479,29 @@ export const reportDataFetcher = {
   'RPT-ATT-001': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
     const targetDate = filters?.dateRange?.startDate || '2026-10-27'
+    const actualRecords = attendanceService.getAttendanceRecords({ date: targetDate }, user) || []
+    const recordsByEmpId = new Map(actualRecords.map((r) => [r.employeeId, r]))
 
     const rows = staff.map((e, idx) => {
+      const rec = recordsByEmpId.get(e.id)
+      if (rec) {
+        const lateMin = Number(rec.lateMinutes || 0)
+        const isAbsent = rec.status === 'Absent'
+        const isHalfDay = rec.status === 'Half Day' || rec.isHalfDay
+        const workHoursNum = parseFloat(rec.workedHours || 0)
+        return {
+          date: targetDate,
+          employeeId: e.id,
+          name: e.name,
+          department: e.department || rec.departmentName || 'Development',
+          shift: rec.shiftName || 'General Day (09:00 - 18:00)',
+          checkIn: rec.checkIn || (rec.checkInTime ? formatTimeTo12Hour(rec.checkInTime) : '--:--'),
+          checkOut: rec.checkOut || (rec.checkOutTime ? formatTimeTo12Hour(rec.checkOutTime) : '--:--'),
+          workHours: workHoursNum,
+          lateMinutes: lateMin,
+          status: isHalfDay ? 'Half Day' : (isAbsent ? 'Absent' : (lateMin > 0 ? 'Late Present' : (rec.status || 'Present')))
+        }
+      }
       const isLate = idx % 4 === 1
       const isAbsent = idx % 10 === 7
       return {
@@ -497,7 +518,7 @@ export const reportDataFetcher = {
       }
     })
 
-    const presentCount = rows.filter((r) => r.status.includes('Present')).length
+    const presentCount = rows.filter((r) => r.status.includes('Present') || r.status === 'Half Day').length
     const lateCount = rows.filter((r) => r.lateMinutes > 0).length
     const absentCount = rows.filter((r) => r.status === 'Absent').length
 

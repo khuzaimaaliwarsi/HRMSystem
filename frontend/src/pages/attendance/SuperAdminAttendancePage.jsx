@@ -62,9 +62,15 @@ export function SuperAdminAttendancePage() {
   const [registerDate, setRegisterDate] = useState(() => getKarachiToday())
   const [stats, setStats] = useState(() => attendanceService.getAttendanceOverviewStats({ date: getKarachiToday() }, currentUser))
 
-  const handleRegisterDateChange = useCallback((newDate) => {
+  const handleRegisterDateChange = useCallback(async (newDate) => {
     setRegisterDate(newDate)
     setStats(attendanceService.getAttendanceOverviewStats({ date: newDate }, currentUser))
+    setRecords(attendanceService.getAttendanceRecords({}, currentUser))
+    try {
+      await attendanceService.syncDailyRegister?.(newDate)
+      setRecords(attendanceService.getAttendanceRecords({}, currentUser))
+      setStats(attendanceService.getAttendanceOverviewStats({ date: newDate }, currentUser))
+    } catch (_) {}
   }, [currentUser])
 
   const [departments, setDepartments] = useState(() => employeeService.getDepartments())
