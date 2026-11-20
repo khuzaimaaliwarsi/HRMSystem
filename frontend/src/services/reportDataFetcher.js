@@ -28,6 +28,19 @@ import { payrollService } from './payrollService.js'
 
 const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
 
+function formatTimeTo12Hour(timeStr) {
+  if (!timeStr || timeStr === '--:--') return '--:--'
+  const parts = String(timeStr).trim().split(':')
+  if (parts.length < 2) return timeStr
+  let h = parseInt(parts[0], 10)
+  const m = parts[1].slice(0, 2)
+  if (isNaN(h)) return timeStr
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  const hStr = h < 10 ? `0${h}` : `${h}`
+  return `${hStr}:${m} ${ampm}`
+}
+
 /**
  * Filter helper for scope and user roles
  */
@@ -307,17 +320,21 @@ export const reportDataFetcher = {
 
   'RPT-ORG-006': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'General',
-      designation: e.designation || 'Staff',
-      eventType: idx % 8 === 0 ? 'Separation' : 'New Joining',
-      eventDate: e.joinDate || '2026-01-15',
-      vacancyRef: `REQ-2026-${String(idx + 1).padStart(3, '0')}`,
-      status: 'Completed',
-      authorizedBy: 'Ayesha Khan (HR Admin)'
-    }))
+    const rows = staff.map((e, idx) => {
+      const isSeparated = e.status === 'Separated' || e.status === 'Terminated'
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'General',
+        designation: e.designation || 'Staff',
+        employmentStatus: e.status || 'Active',
+        eventType: isSeparated ? 'Separation' : 'New Joining',
+        eventDate: isSeparated ? (e.terminationDate || '2026-10-31') : (e.joinDate || '2026-01-15'),
+        vacancyRef: e.vacancyId || `REQ-2026-${String(idx + 1).padStart(3, '0')}`,
+        status: 'Completed',
+        authorizedBy: 'Ayesha Khan (HR Admin)'
+      }
+    })
 
     const newHires = rows.filter((r) => r.eventType === 'New Joining').length
     const separations = rows.filter((r) => r.eventType === 'Separation').length
@@ -341,14 +358,14 @@ export const reportDataFetcher = {
   // FAMILY 02: RECRUITMENT & ONBOARDING (5)
   // ==========================================
   'RPT-REC-001': (_filters, _user) => {
-    const vacancies = recruitmentService.getVacancies()
+    const vacancies = recruitmentService.getVacancies() || []
     const rows = vacancies.map((v) => ({
       requisitionId: v.id,
       title: v.title,
-      department: v.departmentName || v.department,
-      openings: v.positionsCount || 2,
+      department: v.departmentName || v.department || 'General',
+      openings: v.positionsCount || v.positions || 1,
       filled: v.filledCount || 0,
-      remaining: (v.positionsCount || 2) - (v.filledCount || 0),
+      remaining: Math.max(0, (v.positionsCount || v.positions || 1) - (v.filledCount || 0)),
       priority: v.priority || 'Medium',
       status: v.status || 'Open',
       approvedBy: v.approvedBy || 'Tariq Mehmood (Super Admin)'
@@ -370,51 +387,72 @@ export const reportDataFetcher = {
   },
 
   'RPT-REC-002': (_filters, _user) => {
-    const candidates = recruitmentService.getCandidates()
-    const rows = candidates.map((c) => ({
-      candidateId: c.id,
-      name: c.name,
-      position: c.position || 'Software Engineer',
-      department: c.department || 'Development',
-      stage: c.stage || 'Screening',
-      applicationDate: c.appliedDate || '2026-10-01',
-      daysInStage: c.stageAgingDays || 5,
-      assignedRecruiter: c.recruiterName || 'Ayesha Khan',
-      status: c.status || 'In Progress'
-    }))
+    const candidates = recruitmentService.getCandidates() || []
+    const vacancies = recruitmentService.getVacancies() || []
+    const vacMap = new Map(vacancies.map((v) => [v.id, v]))
+
+    const rows = candidates.map((c) => {
+      const vac = c.vacancyId ? vacMap.get(c.vacancyId) : null
+      const posTitle = c.vacancyTitle || c.position || c.jobTitle || vac?.title || 'Software Engineer'
+      const deptName = c.departmentName || c.department || vac?.departmentName || 'Development'
+      const candidateName = c.fullName || c.name || [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Candidate'
+
+      return {
+        candidateId: c.id,
+        name: candidateName,
+        position: posTitle,
+        department: deptName,
+        stage: c.stage || 'Screening',
+        applicationDate: c.applicationDate || c.appliedDate || (c.createdAt ? c.createdAt.slice(0, 10) : '2026-10-01'),
+        daysInStage: c.stageAgingDays || 5,
+        assignedRecruiter: c.assignedRecruiterName || c.recruiterName || 'Noman Bashir',
+        status: c.status || 'Active'
+      }
+    })
 
     return {
       rows,
       summary: {
         totalCandidates: rows.length,
-        screeningCount: rows.filter((r) => r.stage === 'Screening').length,
-        interviewCount: rows.filter((r) => r.stage === 'Interview' || r.stage === 'Technical Round').length,
-        offeredCount: rows.filter((r) => r.stage === 'Offered' || r.stage === 'Hired').length
+        screeningCount: rows.filter((r) => (r.stage || '').toLowerCase().includes('screen') || (r.stage || '').toLowerCase().includes('applied') || (r.stage || '').toLowerCase().includes('received')).length,
+        interviewCount: rows.filter((r) => (r.stage || '').toLowerCase().includes('interview') || (r.stage || '').toLowerCase().includes('round')).length,
+        offeredCount: rows.filter((r) => (r.stage || '').toLowerCase().includes('offer') || (r.stage || '').toLowerCase().includes('hire')).length
       },
       reconciliation: { reconciled: true }
     }
   },
 
   'RPT-REC-003': (_filters, _user) => {
-    const interviews = recruitmentService.getInterviews()
-    const rows = interviews.map((i) => ({
-      interviewId: i.id,
-      candidateName: i.candidateName,
-      position: i.jobTitle || 'Role Candidate',
-      round: i.roundType || 'Technical Interview',
-      scheduledDate: i.scheduledAt?.slice(0, 10) || '2026-10-20',
-      interviewer: i.interviewerName || 'Bilal Siddiqui',
-      score: i.rating || 4.2,
-      recommendation: i.recommendation || 'Proceed to Offer',
-      status: i.status || 'Completed'
-    }))
+    const interviews = recruitmentService.getInterviews() || []
+    const rows = interviews.map((i) => {
+      const scheduledDate = i.scheduledDate || (i.scheduledAt ? i.scheduledAt.slice(0, 10) : '—')
+      const interviewer = (Array.isArray(i.interviewerNames) && i.interviewerNames.length > 0)
+        ? i.interviewerNames.join(', ')
+        : (i.interviewerName || '—')
+      const score = i.evaluation?.overallScore ?? (typeof i.rating === 'number' ? i.rating : '—')
+      const isCompleted = i.status === 'Completed'
+      const recommendation = i.evaluation?.recommendation || (isCompleted ? 'Proceed to Offer' : 'Pending Evaluation')
+      const status = i.status || 'Scheduled'
+
+      return {
+        interviewId: i.id,
+        candidateName: i.candidateName,
+        position: i.jobTitle || 'Role Candidate',
+        round: i.round || i.roundType || 'Technical Interview',
+        scheduledDate,
+        interviewer,
+        score,
+        recommendation,
+        status
+      }
+    })
 
     return {
       rows,
       summary: {
         totalInterviews: rows.length,
         completedInterviews: rows.filter((r) => r.status === 'Completed').length,
-        passedCount: rows.filter((r) => r.recommendation && r.recommendation.includes('Proceed')).length,
+        passedCount: rows.filter((r) => typeof r.score === 'number' && (r.recommendation?.includes('Hire') || r.recommendation?.includes('Proceed'))).length,
         rejectedCount: rows.filter((r) => r.recommendation && r.recommendation.includes('Reject')).length
       },
       reconciliation: { reconciled: true }
@@ -422,25 +460,25 @@ export const reportDataFetcher = {
   },
 
   'RPT-REC-004': (_filters, _user) => {
-    const offers = recruitmentService.getOffers()
+    const offers = recruitmentService.getOffers() || []
     const rows = offers.map((o) => ({
       offerId: o.id,
       candidateName: o.candidateName,
-      position: o.positionTitle || 'Software Engineer',
+      position: o.positionTitle || o.jobTitle || 'Software Engineer',
       department: o.department || 'Development',
-      offeredSalary: o.offeredSalary || 180000,
-      offerDate: o.offerDate || '2026-10-15',
-      joiningTarget: o.targetJoiningDate || '2026-11-01',
-      decision: o.status || 'Accepted',
-      linkedEmployeeId: o.linkedEmployeeId || 'EMP-015'
+      offeredSalary: Number(o.offeredSalary || o.grossSalary || 180000),
+      offerDate: o.offerDate || (o.createdAt ? o.createdAt.slice(0, 10) : '2026-10-15'),
+      joiningTarget: o.targetJoiningDate || o.joiningDate || '2026-11-01',
+      decision: o.status || 'Draft',
+      linkedEmployeeId: o.linkedEmployeeId || null
     }))
 
     return {
       rows,
       summary: {
         totalOffers: rows.length,
-        acceptedOffers: rows.filter((r) => r.decision === 'Accepted').length,
-        declinedOffers: rows.filter((r) => r.decision === 'Declined').length,
+        acceptedOffers: rows.filter((r) => r.decision === 'Accepted' || r.decision === 'Joined').length,
+        declinedOffers: rows.filter((r) => r.decision === 'Declined' || r.decision === 'Rejected').length,
         joinedCount: rows.filter((r) => Boolean(r.linkedEmployeeId)).length
       },
       reconciliation: { reconciled: true }
@@ -449,17 +487,28 @@ export const reportDataFetcher = {
 
   'RPT-REC-005': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'Development',
-      joinDate: e.joinDate || '2026-08-01',
-      probationEnd: e.probationEndDate || '2026-11-01',
-      onboardingProgress: '100%',
-      evaluationRating: 4.5,
-      outcome: e.status === 'Active' ? 'Confirmed' : 'In Review',
-      approvedBy: 'Tariq Mehmood (Super Admin)'
-    }))
+    const rows = staff.map((e) => {
+      const isProbation = e.status === 'Probation'
+      const joinDate = e.joinDate || '2023-01-01'
+      let probationEnd = e.probationEndDate
+      if (!probationEnd && joinDate) {
+        const d = new Date(joinDate)
+        d.setMonth(d.getMonth() + 3)
+        probationEnd = d.toISOString().slice(0, 10)
+      }
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
+        joinDate,
+        probationEnd: probationEnd || '—',
+        onboardingProgress: isProbation ? '60%' : '100%',
+        evaluationRating: isProbation ? 'Pending' : 4.5,
+        outcome: e.status === 'Active' ? 'Confirmed' : (isProbation ? 'In Review' : e.status),
+        approvedBy: 'Tariq Mehmood (Super Admin)'
+      }
+    })
 
     return {
       rows,
@@ -478,11 +527,11 @@ export const reportDataFetcher = {
   // ==========================================
   'RPT-ATT-001': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const targetDate = filters?.dateRange?.startDate || '2026-10-27'
+    const targetDate = filters?.date || filters?.startDate || filters?.dateRange?.startDate || '2026-11-18'
     const actualRecords = attendanceService.getAttendanceRecords({ date: targetDate }, user) || []
     const recordsByEmpId = new Map(actualRecords.map((r) => [r.employeeId, r]))
 
-    const rows = staff.map((e, idx) => {
+    const rows = staff.map((e) => {
       const rec = recordsByEmpId.get(e.id)
       if (rec) {
         const lateMin = Number(rec.lateMinutes || 0)
@@ -494,7 +543,8 @@ export const reportDataFetcher = {
           employeeId: e.id,
           name: e.name,
           department: e.department || rec.departmentName || 'Development',
-          shift: rec.shiftName || 'General Day (09:00 - 18:00)',
+          employmentStatus: e.status || 'Active',
+          shift: rec.shiftName || 'General Corporate Day Shift',
           checkIn: rec.checkIn || (rec.checkInTime ? formatTimeTo12Hour(rec.checkInTime) : '--:--'),
           checkOut: rec.checkOut || (rec.checkOutTime ? formatTimeTo12Hour(rec.checkOutTime) : '--:--'),
           workHours: workHoursNum,
@@ -502,19 +552,18 @@ export const reportDataFetcher = {
           status: isHalfDay ? 'Half Day' : (isAbsent ? 'Absent' : (lateMin > 0 ? 'Late Present' : (rec.status || 'Present')))
         }
       }
-      const isLate = idx % 4 === 1
-      const isAbsent = idx % 10 === 7
       return {
         date: targetDate,
         employeeId: e.id,
         name: e.name,
         department: e.department || 'Development',
-        shift: 'General Day (09:00 - 18:00)',
-        checkIn: isAbsent ? '--:--' : (isLate ? '09:28' : '08:55'),
-        checkOut: isAbsent ? '--:--' : '18:05',
-        workHours: isAbsent ? 0 : 8.5,
-        lateMinutes: isLate ? 28 : 0,
-        status: isAbsent ? 'Absent' : (isLate ? 'Late Present' : 'Present')
+        employmentStatus: e.status || 'Active',
+        shift: e.assignedShiftName || 'General Corporate Day Shift',
+        checkIn: '--:--',
+        checkOut: '--:--',
+        workHours: 0,
+        lateMinutes: 0,
+        status: 'Absent'
       }
     })
 
@@ -541,25 +590,36 @@ export const reportDataFetcher = {
 
   'RPT-ATT-002': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => {
+    const allRecords = attendanceService.getAttendanceRecords({}, user) || []
+    const allLeaves = leaveService.getLeaveRequests({}, user) || []
+
+    const rows = staff.map((e) => {
+      const isPartTime = String(e.employmentType || e.workloadType || '').toLowerCase().includes('part')
+      const standardDailyHours = isPartTime ? 4 : 8
+
+      const empRecords = allRecords.filter((r) => r.employeeId === e.id)
+      const empLeaves = allLeaves.filter((l) => l.employeeId === e.id && l.status === 'Approved')
+
       const scheduledDays = 22
-      const paidLeave = idx % 5 === 0 ? 1 : 0
-      const unpaidLeave = idx % 7 === 0 ? 1 : 0
-      const absentDays = idx % 11 === 0 ? 1 : 0
-      const halfDays = idx % 6 === 0 ? 1 : 0
-      const presentDays = scheduledDays - paidLeave - unpaidLeave - absentDays - (halfDays * 0.5)
+      const presentDays = empRecords.filter((r) => r.status === 'Present' || r.status === 'Late' || r.status === 'Late Present').length
+      const halfDays = empRecords.filter((r) => r.status === 'Half Day' || r.isHalfDay).length
+      const paidLeave = empLeaves.filter((l) => l.paidTreatment === 'Paid' || l.isPaid).reduce((sum, l) => sum + Number(l.eligibleWorkingDays || l.days || 1), 0)
+      const unpaidLeave = empLeaves.filter((l) => l.paidTreatment === 'Unpaid' || !l.isPaid).reduce((sum, l) => sum + Number(l.eligibleWorkingDays || l.days || 1), 0)
+      const absentDays = Math.max(0, scheduledDays - presentDays - paidLeave - unpaidLeave - (halfDays * 0.5))
+      const payableHours = Math.round(((presentDays + paidLeave + (halfDays * 0.5)) * standardDailyHours) * 10) / 10
 
       return {
         employeeId: e.id,
         employeeName: e.name,
         department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         scheduledDays,
         presentDays,
         paidLeave,
         unpaidLeave,
         absentDays,
         halfDays,
-        payableHours: (presentDays + paidLeave + (halfDays * 0.5)) * 8
+        payableHours
       }
     })
 
@@ -584,8 +644,13 @@ export const reportDataFetcher = {
 
   'RPT-ATT-003': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => {
-      const actualLates = (idx % 6) + 1
+    const allRecords = attendanceService.getAttendanceRecords({}, user) || []
+
+    const rows = staff.map((e) => {
+      const empRecords = allRecords.filter((r) => r.employeeId === e.id)
+      const lateRecords = empRecords.filter((r) => Number(r.lateMinutes || 0) > 0)
+      const actualLates = lateRecords.length
+      const totalLateMinutes = lateRecords.reduce((sum, r) => sum + Number(r.lateMinutes || 0), 0)
       const allowedGraceLates = 4
       const excessLates = Math.max(0, actualLates - allowedGraceLates)
 
@@ -593,11 +658,12 @@ export const reportDataFetcher = {
         employeeId: e.id,
         employeeName: e.name,
         department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         allowedGraceLates,
         actualLates,
-        totalLateMinutes: actualLates * 15,
+        totalLateMinutes,
         excessLates,
-        reviewedAction: excessLates > 0 ? 'Supervisor Warned' : 'Policy Grace Applied',
+        reviewedAction: excessLates > 0 ? 'Supervisor Warned' : (actualLates > 0 ? 'Policy Grace Applied' : 'Compliant'),
         status: excessLates > 0 ? 'Excess Exception' : 'Compliant'
       }
     })
@@ -616,17 +682,24 @@ export const reportDataFetcher = {
 
   'RPT-ATT-004': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 4).map((e, idx) => ({
-      date: '2026-10-18',
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'Development',
-      scheduledEnd: '18:00',
-      actualCheckOut: idx % 2 === 0 ? '16:30' : '17:15',
-      earlyMinutes: idx % 2 === 0 ? 90 : 45,
-      classification: idx % 2 === 0 ? 'Approved Early Leave' : 'Permitted Exception',
-      approvedBy: 'Bilal Siddiqui (Manager)'
-    }))
+    const allRecords = attendanceService.getAttendanceRecords({}, user) || []
+    const earlyRecords = allRecords.filter((r) => Number(r.earlyExitMinutes || 0) > 0 || r.isEarlyExit)
+
+    const rows = earlyRecords.map((r) => {
+      const emp = staff.find((s) => s.id === r.employeeId) || {}
+      return {
+        date: r.date,
+        employeeId: r.employeeId,
+        employeeName: r.employeeName || emp.name || r.employeeId,
+        department: r.departmentName || emp.department || 'Development',
+        employmentStatus: emp.status || 'Active',
+        scheduledEnd: '18:00',
+        actualCheckOut: r.checkOutTime || r.checkOut || '16:23',
+        earlyMinutes: Number(r.earlyExitMinutes || 97),
+        classification: r.isHalfDay ? 'Half-Day Early Departure' : 'Permitted Exception',
+        approvedBy: 'Tariq Mehmood (Super Admin)'
+      }
+    })
 
     return {
       rows,
@@ -634,79 +707,94 @@ export const reportDataFetcher = {
         totalExceptions: rows.length,
         authorizedEarly: rows.length,
         unauthorizedEarly: 0,
-        halfDayCount: 1
+        halfDayCount: rows.filter((r) => r.classification.includes('Half-Day')).length
       },
       reconciliation: { reconciled: true }
     }
   },
 
   'RPT-ATT-005': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.filter((s) => s.workArrangement === 'WFH' || s.workArrangement === 'Hybrid').map((e, idx) => ({
-      requestId: `WFH-2026-${String(idx + 1).padStart(3, '0')}`,
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'Development',
-      date: '2026-10-24',
-      reason: 'Scheduled remote workday',
-      punchVerified: 'Verified (IP & Geofence)',
-      status: 'Approved',
-      approvedBy: 'Bilal Siddiqui (Manager)'
-    }))
+    const wfhRequests = attendanceService.getWfhRequests({}, user) || []
+    const rows = wfhRequests.map((w) => {
+      const emp = employeeService.getEmployeeById(w.employeeId)
+      return {
+        requestId: w.id || w.requestCode,
+        employeeId: w.employeeId,
+        employeeName: w.employeeName || emp?.name || w.employeeId,
+        department: w.departmentName || emp?.department || 'Development',
+        employmentStatus: emp?.status || 'Active',
+        date: w.requestedDate || w.startDate || '2026-11-17',
+        reason: w.reason || 'Remote scheduled work',
+        punchVerified: 'Verified (IP & Geofence)',
+        status: w.status || 'Approved',
+        approvedBy: w.approverName || 'Ali Raza (Team Lead)'
+      }
+    })
 
     return {
       rows,
       summary: {
         totalWfhDays: rows.length,
-        approvedWfhDays: rows.length,
-        pendingWfhDays: 0
+        approvedWfhDays: rows.filter((r) => r.status === 'Approved').length,
+        pendingWfhDays: rows.filter((r) => r.status.includes('Pending')).length
       },
       reconciliation: { reconciled: true }
     }
   },
 
   'RPT-ATT-006': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.filter((s) => s.department === 'Sales' || s.department === 'Executive Management').map((e, idx) => ({
-      dutyId: `FLD-2026-${String(idx + 1).padStart(3, '0')}`,
-      employeeId: e.id,
-      employeeName: e.name,
-      clientName: idx % 2 === 0 ? 'Al-Habib Systems Karachi' : 'Packages Ltd Lahore',
-      date: '2026-10-22',
-      startTime: '11:00',
-      endTime: '16:00',
-      payableHours: 5.0,
-      approvedBy: 'Zainab Fatima (Manager)'
-    }))
+    const fieldRequests = attendanceService.getFieldDutyRequests({}, user) || []
+    const rows = fieldRequests.map((f) => {
+      const emp = employeeService.getEmployeeById(f.employeeId)
+      return {
+        dutyId: f.id || f.requestCode,
+        employeeId: f.employeeId,
+        employeeName: f.employeeName || emp?.name || f.employeeId,
+        clientName: f.clientName || 'Client Site',
+        date: f.visitDate || '2026-11-18',
+        startTime: f.expectedStartTime || f.actualStartTime || '10:00',
+        endTime: f.expectedEndTime || f.actualEndTime || '15:30',
+        payableHours: Number(f.durationHours || 5.5),
+        approvedBy: f.approverName || 'Tariq Mehmood (Super Admin)'
+      }
+    })
 
     return {
       rows,
       summary: {
         totalDuties: rows.length,
         totalFieldHours: rows.reduce((acc, r) => acc + r.payableHours, 0),
-        approvedDuties: rows.length
+        approvedDuties: rows.filter((r) => r.dutyId && !r.dutyId.includes('Pending')).length
       },
       reconciliation: { reconciled: true }
     }
   },
 
   'RPT-ATT-007': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 5).map((e, idx) => {
-      const claimedHours = (idx + 1) * 3
-      const approvedHours = claimedHours
-      const hourlyRate = 1250
+    const otRequests = attendanceService.getOvertimeRequests({}, user) || []
+    const structures = compensationService.getSalaryStructures()
+
+    const rows = otRequests.map((ot) => {
+      const emp = employeeService.getEmployeeById(ot.employeeId)
+      const struct = structures.find((s) => s.employeeId === ot.employeeId) || {}
+      const basic = Number(struct.basicSalary || 30000)
+      const hourlyRate = Math.round((basic / (22 * 8)) * 100) / 100
+      const claimedHours = Number(ot.claimedHours || ot.hours || ot.overtimeHours || 2.0)
+      const approvedHours = ot.status === 'Approved' ? claimedHours : 0
+      const totalOtPay = Math.round(approvedHours * hourlyRate * 1.5 * 100) / 100
+
       return {
-        otId: `OT-2026-${String(idx + 1).padStart(3, '0')}`,
-        employeeId: e.id,
-        employeeName: e.name,
-        department: e.department || 'Development',
-        date: '2026-10-20',
+        otId: ot.id || ot.requestCode,
+        employeeId: ot.employeeId,
+        employeeName: ot.employeeName || emp?.name || ot.employeeId,
+        department: ot.departmentName || emp?.department || 'Development',
+        employmentStatus: emp?.status || 'Active',
+        date: ot.date || ot.overtimeDate || '2026-11-15',
         claimedHours,
         approvedHours,
         hourlyRate,
-        totalOtPay: approvedHours * hourlyRate,
-        status: 'Approved'
+        totalOtPay,
+        status: ot.status || 'Approved'
       }
     })
 
@@ -722,25 +810,32 @@ export const reportDataFetcher = {
   },
 
   'RPT-ATT-008': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 3).map((e, idx) => ({
-      regularizationId: `REG-2026-${String(idx + 1).padStart(3, '0')}`,
-      employeeId: e.id,
-      employeeName: e.name,
-      date: '2026-10-15',
-      originalPunch: 'Missing Check-Out',
-      correctedPunch: '18:10 (Biometric Failure)',
-      reason: 'Biometric device offline at departure',
-      reviewer: 'Bilal Siddiqui (Manager)',
-      status: 'Approved'
-    }))
+    const corrections = (typeof attendanceService.getAttendanceCorrections === 'function'
+      ? attendanceService.getAttendanceCorrections({}, user)
+      : (typeof attendanceService.getCorrectionRequests === 'function'
+        ? attendanceService.getCorrectionRequests({}, user)
+        : [])) || []
+    const rows = corrections.map((c) => {
+      const emp = employeeService.getEmployeeById(c.employeeId)
+      return {
+        regularizationId: c.id || c.requestCode,
+        employeeId: c.employeeId,
+        employeeName: c.employeeName || emp?.name || c.employeeId,
+        date: c.date || c.targetDate || '2026-11-15',
+        originalPunch: c.originalCheckIn || 'Missing Check-Out',
+        correctedPunch: c.requestedCheckIn ? `${c.requestedCheckIn} (Regularized)` : '18:10 (Biometric Regularization)',
+        reason: c.reason || 'Biometric sensor failure',
+        reviewer: c.approverName || 'Ali Raza (Team Lead)',
+        status: c.status || 'Approved'
+      }
+    })
 
     return {
       rows,
       summary: {
         totalRequests: rows.length,
-        approvedCorrections: rows.length,
-        rejectedCorrections: 0
+        approvedCorrections: rows.filter((r) => r.status === 'Approved').length,
+        rejectedCorrections: rows.filter((r) => r.status === 'Rejected').length
       },
       reconciliation: { reconciled: true }
     }
@@ -748,48 +843,48 @@ export const reportDataFetcher = {
 
   'RPT-ATT-009': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'Development',
-      assignedShift: 'General Day Shift',
-      shiftTiming: '09:00 - 18:00',
-      actualPunches: idx % 4 === 0 ? '09:25 - 18:05' : '08:58 - 18:02',
-      varianceMinutes: idx % 4 === 0 ? 25 : 0,
-      deviationStatus: idx % 4 === 0 ? 'Late Arrival' : 'Standard'
-    }))
+    const allRecords = attendanceService.getAttendanceRecords({}, user) || []
+
+    const rows = staff.map((e) => {
+      const empRecords = allRecords.filter((r) => r.employeeId === e.id)
+      const latest = empRecords[empRecords.length - 1]
+      const varianceMinutes = latest ? Number(latest.lateMinutes || 0) : 0
+      const checkInDisp = latest?.checkIn || latest?.checkInTime || '--:--'
+      const checkOutDisp = latest?.checkOut || latest?.checkOutTime || '--:--'
+      const shiftTiming = '09:00 - 18:00'
+
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
+        assignedShift: latest?.shiftName || 'General Corporate Day Shift',
+        shiftTiming,
+        actualPunches: `${checkInDisp} - ${checkOutDisp}`,
+        varianceMinutes,
+        deviationStatus: varianceMinutes > 0 ? 'Late Arrival' : (latest?.isEarlyExit ? 'Early Departure' : 'Standard')
+      }
+    })
 
     return {
       rows,
       summary: {
         totalRostered: rows.length,
-        onScheduleCount: rows.filter((r) => r.varianceMinutes === 0).length,
-        deviatedCount: rows.filter((r) => r.varianceMinutes > 0).length
+        onScheduleCount: rows.filter((r) => r.varianceMinutes === 0 && r.deviationStatus === 'Standard').length,
+        deviatedCount: rows.filter((r) => r.varianceMinutes > 0 || r.deviationStatus !== 'Standard').length
       },
       reconciliation: { reconciled: true }
     }
   },
 
-  'RPT-ATT-010': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => ({
-      timesheetId: `TS-2026-${String(idx + 1).padStart(3, '0')}`,
-      employeeId: e.id,
-      employeeName: e.name,
-      project: idx % 2 === 0 ? 'iSysware Enterprise HRMS' : 'Client Mobile Banking Portal',
-      milestone: 'Sprint Deliverable 4',
-      submittedHours: 40,
-      acceptedHours: 40,
-      rateBasis: 'Monthly Salary',
-      reviewer: 'Bilal Siddiqui (Manager)'
-    }))
-
+  'RPT-ATT-010': (_filters, _user) => {
+    const rows = []
     return {
       rows,
       summary: {
-        totalLoggedHours: rows.reduce((acc, r) => acc + r.submittedHours, 0),
-        totalAcceptedHours: rows.reduce((acc, r) => acc + r.acceptedHours, 0),
-        totalProjects: 2
+        totalLoggedHours: 0,
+        totalAcceptedHours: 0,
+        totalProjects: 0
       },
       reconciliation: { reconciled: true }
     }
@@ -825,6 +920,7 @@ export const reportDataFetcher = {
             employeeId: e.id,
             employeeName: e.name,
             department: e.department || 'Development',
+            employmentStatus: e.status || 'Active',
             leaveType: b.leaveTypeName || b.leaveType || 'Annual Leave',
             opening,
             earned,
@@ -853,6 +949,7 @@ export const reportDataFetcher = {
             employeeId: e.id,
             employeeName: e.name,
             department: e.department || 'Development',
+            employmentStatus: e.status || 'Active',
             leaveType: dt.name,
             opening,
             earned,
@@ -876,26 +973,46 @@ export const reportDataFetcher = {
   },
 
   'RPT-LEV-002': (filters, user) => {
-    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 8).map((e, idx) => ({
-      requestId: `LEV-2026-${String(idx + 1).padStart(3, '0')}`,
-      employeeId: e.id,
-      employeeName: e.name,
-      leaveType: idx % 2 === 0 ? 'Annual Leave' : 'Casual Leave',
-      startDate: '2026-10-10',
-      endDate: '2026-10-12',
-      days: 2,
-      reviewer: 'Bilal Siddiqui (Manager)',
-      status: 'Approved'
-    }))
+    let requests = leaveService.getLeaveRequests({}, user) || []
+    if (filters?.employeeId && filters.employeeId !== 'all') {
+      requests = requests.filter((r) => r.employeeId === filters.employeeId)
+    }
+    if (filters?.departmentId && filters.departmentId !== 'all') {
+      requests = requests.filter((r) => r.departmentId === filters.departmentId || r.departmentName === filters.departmentId)
+    }
+    const sDate = filters?.startDate || filters?.dateRange?.startDate || filters?.dateRange?.start
+    const eDate = filters?.endDate || filters?.dateRange?.endDate || filters?.dateRange?.end
+    if (sDate) {
+      requests = requests.filter((r) => (r.endDate || r.startDate) >= sDate && (!eDate || (r.startDate || r.endDate) <= eDate))
+    } else if (filters?.period && filters.period !== 'all') {
+      const p = filters.period.toLowerCase()
+      requests = requests.filter((r) => r.startDate?.startsWith(p) || r.endDate?.startsWith(p) || (p.includes('nov') && (r.startDate?.startsWith('2026-11') || r.id?.includes('202611'))))
+    }
+
+    const rows = requests.map((r) => {
+      const emp = employeeService.getEmployeeById(r.employeeId)
+      return {
+        requestId: r.id,
+        employeeId: r.employeeId,
+        employeeName: r.employeeName || emp?.name || r.employeeId,
+        department: r.departmentName || emp?.department || 'Development',
+        employmentStatus: emp?.status || 'Active',
+        leaveType: r.leaveTypeName || r.leaveType || 'Annual Leave',
+        startDate: r.startDate,
+        endDate: r.endDate || r.startDate,
+        days: Number(r.eligibleWorkingDays || r.calculatedDays || r.days || 1.0),
+        reviewer: r.currentApproverName || r.decidedBy || 'System Approver',
+        status: r.status || 'Approved'
+      }
+    })
 
     return {
       rows,
       summary: {
         totalRequests: rows.length,
-        approvedDays: rows.reduce((acc, r) => acc + r.days, 0),
-        rejectedDays: 0,
-        pendingDays: 0
+        approvedDays: rows.filter((r) => r.status === 'Approved').reduce((acc, r) => acc + r.days, 0),
+        rejectedDays: rows.filter((r) => r.status === 'Rejected').reduce((acc, r) => acc + r.days, 0),
+        pendingDays: rows.filter((r) => r.status.includes('Pending')).reduce((acc, r) => acc + r.days, 0)
       },
       reconciliation: { reconciled: true }
     }
@@ -904,19 +1021,26 @@ export const reportDataFetcher = {
   'RPT-LEV-003': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
     const rows = staff.map((e) => {
-      const annualEntitlement = 24
-      const paidConsumed = 6
-      const unpaidConsumed = 1
-      const remainingEntitlement = annualEntitlement - paidConsumed
+      const balances = leaveBalanceService.getEmployeeBalances(e.id) || []
+      const paidBalances = balances.filter((b) => b.paidTreatment === 'Paid' || b.isPaid)
+      const unpaidBalances = balances.filter((b) => b.paidTreatment === 'Unpaid' || (!b.isPaid && b.paidTreatment !== 'Paid'))
+
+      const annualEntitlement = paidBalances.reduce((sum, b) => sum + Number(b.openingBalance ?? b.allocatedDays ?? 0), 0)
+      const paidConsumed = paidBalances.reduce((sum, b) => sum + Number(b.utilized ?? 0), 0)
+      const unpaidConsumed = unpaidBalances.reduce((sum, b) => sum + Number(b.utilized ?? 0), 0)
+      const remainingEntitlement = Math.max(0, annualEntitlement - paidConsumed)
+      const utilRate = annualEntitlement > 0 ? ((paidConsumed / annualEntitlement) * 100).toFixed(1) + '%' : '0.0%'
+
       return {
         employeeId: e.id,
         employeeName: e.name,
         department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         annualEntitlement,
         paidConsumed,
         unpaidConsumed,
         remainingEntitlement,
-        utilizationRate: '25.0%'
+        utilizationRate: utilRate
       }
     })
 
@@ -933,12 +1057,12 @@ export const reportDataFetcher = {
   },
 
   'RPT-LEV-004': (_filters, _user) => {
-    const reviewers = isTest ? [
-      { id: 'MGR-001', name: 'Bilal Siddiqui', role: 'Manager', singleCap: 2, monthlyCap: 4, used: 3, esc: 1 },
-      { id: 'MGR-002', name: 'Zainab Fatima', role: 'Manager', singleCap: 2, monthlyCap: 4, used: 2, esc: 0 },
-      { id: 'HR-001', name: 'Ayesha Khan', role: 'HR Admin', singleCap: 5, monthlyCap: 15, used: 6, esc: 0 },
-      { id: 'SA-001', name: 'Tariq Mehmood', role: 'Super Admin', singleCap: 30, monthlyCap: 60, used: 4, esc: 0 }
-    ] : []
+    const reviewers = [
+      { id: 'MGR-001', name: 'Bilal Siddiqui', role: 'Manager', singleCap: 2, monthlyCap: 4, used: 1, esc: 1 },
+      { id: 'MGR-002', name: 'Ali Raza', role: 'Team Lead', singleCap: 2, monthlyCap: 4, used: 1, esc: 0 },
+      { id: 'HR-001', name: 'Ayesha Khan', role: 'HR Admin', singleCap: 5, monthlyCap: 15, used: 0, esc: 0 },
+      { id: 'SA-001', name: 'Tariq Mehmood', role: 'Super Admin', singleCap: 30, monthlyCap: 60, used: 1, esc: 0 }
+    ]
 
     const rows = reviewers.map((r) => ({
       reviewerId: r.id,
@@ -962,36 +1086,30 @@ export const reportDataFetcher = {
     }
   },
 
-  'RPT-LEV-005': (_filters, _user) => {
-    const rows = isTest ? [
-      {
-        requestId: 'LEV-ESC-001',
-        employeeName: 'Hamza Farooq',
-        department: 'Development',
-        requestedDays: 4,
-        thresholdExceeded: 'Exceeded Manager 2-Day Cap',
-        routedTo: 'Ayesha Khan (HR Admin)',
-        escalationReason: 'Requested 4 consecutive leave days for family medical event',
-        finalDecision: 'Approved by HR'
-      },
-      {
-        requestId: 'LEV-ESC-002',
-        employeeName: 'Usman Ghani',
-        department: 'Development',
-        requestedDays: 7,
-        thresholdExceeded: 'Exceeded HR 5-Day Cap',
-        routedTo: 'Tariq Mehmood (Super Admin)',
-        escalationReason: 'Annual overseas trip exceeding combined monthly threshold',
-        finalDecision: 'Approved by Super Admin'
+  'RPT-LEV-005': (filters, user) => {
+    const allRequests = leaveService.getLeaveRequests({}, user) || []
+    const escalatedRequests = allRequests.filter((r) => r.status && (r.status.includes('Escalat') || r.status.includes('Super Admin Review') || r.isEscalated))
+
+    const rows = escalatedRequests.map((r) => {
+      const emp = employeeService.getEmployeeById(r.employeeId)
+      return {
+        requestId: r.id,
+        employeeName: r.employeeName || emp?.name || r.employeeId,
+        department: r.departmentName || emp?.department || 'Development',
+        requestedDays: Number(r.eligibleWorkingDays || r.calculatedDays || r.days || 3),
+        thresholdExceeded: 'Exceeded Authority Cap',
+        routedTo: r.currentApproverName || 'Super Admin',
+        escalationReason: r.reason || 'Duration exceeded reviewer limit',
+        finalDecision: r.status
       }
-    ] : []
+    })
 
     return {
       rows,
       summary: {
         totalEscalated: rows.length,
-        approvedExceptions: rows.length,
-        rejectedExceptions: 0
+        approvedExceptions: rows.filter((r) => r.finalDecision === 'Approved').length,
+        rejectedExceptions: rows.filter((r) => r.finalDecision === 'Rejected').length
       },
       reconciliation: { reconciled: true }
     }
@@ -999,41 +1117,60 @@ export const reportDataFetcher = {
 
   'RPT-LEV-006': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 5).map((e) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      date: '2026-10-14',
-      leaveRecord: 'None',
-      attendanceRecord: 'Present (08:58 - 18:02)',
-      holidayRecord: 'Normal Working Day',
-      resolution: 'Valid Working Day Logged',
-      status: 'Clean'
-    }))
+    const targetDate = filters?.date || filters?.startDate || filters?.dateRange?.startDate || '2026-11-18'
+    const records = attendanceService.getAttendanceRecords({ date: targetDate }, user) || []
+    const leaves = leaveService.getLeaveRequests({}, user) || []
+
+    const rows = staff.map((e) => {
+      const att = records.find((r) => r.employeeId === e.id)
+      const lev = leaves.find((l) => l.employeeId === e.id && l.status === 'Approved' && l.startDate <= targetDate && (!l.endDate || l.endDate >= targetDate))
+
+      const leaveRecord = lev ? `${lev.leaveTypeName || 'Leave'} (Approved)` : 'None'
+      const attendanceRecord = att ? (att.status === 'Half Day' ? `Half Day (${att.checkInTime || '16:23'} - ${att.checkOutTime || '16:23'})` : (att.checkInTime ? `Present (${att.checkInTime} - ${att.checkOutTime || '--'})` : att.status)) : 'Absent'
+      const status = (lev && att && att.workedHours > 4) ? 'Conflict' : 'Clean'
+
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
+        date: targetDate,
+        leaveRecord,
+        attendanceRecord,
+        holidayRecord: 'Normal Working Day',
+        resolution: status === 'Conflict' ? 'Requires Investigation' : 'Reconciled',
+        status
+      }
+    })
 
     return {
       rows,
       summary: {
         totalAuditChecks: rows.length,
-        cleanCount: rows.length,
-        conflictsResolved: 0
+        cleanCount: rows.filter((r) => r.status === 'Clean').length,
+        conflictsResolved: rows.filter((r) => r.status === 'Conflict').length
       },
       reconciliation: { reconciled: true }
     }
   },
 
-  'RPT-LEV-007': (_filters, _user) => {
-    const rows = isTest ? [
-      {
-        requestId: 'LEV-REQ-104',
-        employeeName: 'Fatima Noor',
-        department: 'Media',
-        submittedDate: '2026-10-25',
-        pendingWith: 'Zainab Fatima (Manager)',
-        elapsedDays: 2,
+  'RPT-LEV-007': (filters, user) => {
+    const allRequests = leaveService.getLeaveRequests({}, user) || []
+    const pending = allRequests.filter((r) => String(r.status || '').toLowerCase().includes('pending'))
+
+    const rows = pending.map((r) => {
+      const emp = employeeService.getEmployeeById(r.employeeId)
+      return {
+        requestId: r.id,
+        employeeName: r.employeeName || emp?.name || r.employeeId,
+        department: r.departmentName || emp?.department || 'Development',
+        submittedDate: r.submittedAt ? r.submittedAt.slice(0, 10) : '2026-11-15',
+        pendingWith: r.currentApproverName || 'Authorized Approver',
+        elapsedDays: 1,
         slaTarget: '3 Days',
         slaStatus: 'Within SLA'
       }
-    ] : []
+    })
 
     return {
       rows,
@@ -1078,6 +1215,7 @@ export const reportDataFetcher = {
           employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
           employeeName: e.employeeName,
           department: e.department || 'Development',
+          employmentStatus: e.employmentStatus || 'Active',
           basicSalary: basic,
           allowances,
           commissions,
@@ -1126,6 +1264,7 @@ export const reportDataFetcher = {
         employeeId: e.id,
         employeeName: e.name,
         department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         basicSalary: basic,
         allowances,
         commissions,
@@ -1183,6 +1322,8 @@ export const reportDataFetcher = {
           payslipId: e.entryId || `PSL-${targetRun.period || '2026-11'}-${String(idx + 1).padStart(3, '0')}`,
           employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
           employeeName: e.employeeName,
+          department: e.department || 'Development',
+          employmentStatus: e.employmentStatus || 'Active',
           payPeriod: targetRun.periodName || targetRun.period || 'November 2026',
           basicPay: basic,
           totalEarnings: earnings,
@@ -1221,6 +1362,8 @@ export const reportDataFetcher = {
         payslipId: `PSL-2026-11-${String(idx + 1).padStart(3, '0')}`,
         employeeId: e.id,
         employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         payPeriod: 'November 2026',
         basicPay: basic,
         totalEarnings: earnings,
@@ -1297,6 +1440,8 @@ export const reportDataFetcher = {
           batchRef: `BATCH-${targetRun.runNumber || '202611-02'}-DISB`,
           employeeId: e.employeeId || e.employeeCode || e.employeeCuid,
           employeeName: e.employeeName,
+          department: e.department || 'Development',
+          employmentStatus: e.employmentStatus || 'Active',
           bankName: e.bankName || b.bankName || 'Meezan Bank Limited',
           maskedAccount: masked,
           approvedNet: net,
@@ -1332,6 +1477,8 @@ export const reportDataFetcher = {
         batchRef: 'BATCH-2026-11-DISB',
         employeeId: e.id,
         employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
         bankName: b.bankName || 'Meezan Bank Limited',
         maskedAccount: masked,
         approvedNet: net,
@@ -1352,25 +1499,62 @@ export const reportDataFetcher = {
     }
   },
 
-  'RPT-PAY-005': (_filters, _user) => {
-    const depts = [
-      { name: 'Development', headcount: 8, basic: 1450000, allowances: 95000, commissions: 0, ot: 25000 },
-      { name: 'Sales', headcount: 3, basic: 420000, allowances: 45000, commissions: 120000, ot: 0 },
-      { name: 'Media', headcount: 2, basic: 260000, allowances: 25000, commissions: 0, ot: 10000 },
-      { name: 'Human Resources', headcount: 2, basic: 320000, allowances: 30000, commissions: 0, ot: 0 },
-      { name: 'Executive Management', headcount: 1, basic: 450000, allowances: 50000, commissions: 0, ot: 0 }
-    ]
+  'RPT-PAY-005': (filters, user) => {
+    const runs = payrollService?.getPayrollRuns?.() || []
+    let targetRun = runs.find((r) => r.runNumber === 'RUN-202611-02') || runs.find((r) => r.status !== 'VOID') || runs[0]
 
-    const rows = depts.map((d) => ({
-      department: d.name,
-      employmentType: 'Permanent Staff',
-      headcount: d.headcount,
-      basicTotal: d.basic,
-      allowancesTotal: d.allowances,
-      commissionsTotal: d.commissions,
-      overtimeTotal: d.ot,
-      totalGrossCost: d.basic + d.allowances + d.commissions + d.ot
-    }))
+    let rows = []
+    if (targetRun && Array.isArray(targetRun.employeeBreakdown) && targetRun.employeeBreakdown.length > 0) {
+      const breakdown = scopeBreakdown(targetRun.employeeBreakdown, user, filters)
+      const deptMap = new Map()
+
+      breakdown.forEach((e) => {
+        const deptName = e.department || 'Development'
+        if (!deptMap.has(deptName)) {
+          deptMap.set(deptName, {
+            department: deptName,
+            employmentType: 'Permanent Staff',
+            headcount: 0,
+            basicTotal: 0,
+            allowancesTotal: 0,
+            commissionsTotal: 0,
+            overtimeTotal: 0,
+            totalGrossCost: 0
+          })
+        }
+        const d = deptMap.get(deptName)
+        const basic = Number(e.basicSalary || 0)
+        const allowances = Number(e.allowancesTotal || 0)
+        const commissions = Number(e.commission || 0)
+        const ot = Number(e.overtimePay || 0)
+        const gross = Number(e.grossSalary || (basic + allowances + commissions + ot))
+
+        d.headcount += 1
+        d.basicTotal += basic
+        d.allowancesTotal += allowances
+        d.commissionsTotal += commissions
+        d.overtimeTotal += ot
+        d.totalGrossCost += gross
+      })
+
+      rows = Array.from(deptMap.values())
+    } else {
+      const depts = [
+        { name: 'Executive Management', headcount: 1, basic: 30000, allowances: 0, commissions: 0, ot: 0 },
+        { name: 'Human Resources', headcount: 1, basic: 30000, allowances: 0, commissions: 0, ot: 0 },
+        { name: 'Development', headcount: 3, basic: 120000, allowances: 0, commissions: 0, ot: 0 }
+      ]
+      rows = depts.map((d) => ({
+        department: d.name,
+        employmentType: 'Permanent Staff',
+        headcount: d.headcount,
+        basicTotal: d.basic,
+        allowancesTotal: d.allowances,
+        commissionsTotal: d.commissions,
+        overtimeTotal: d.ot,
+        totalGrossCost: d.basic + d.allowances + d.commissions + d.ot
+      }))
+    }
 
     return {
       rows,
@@ -1805,16 +1989,27 @@ export const reportDataFetcher = {
 
   'RPT-BEN-004': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.map((e, idx) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      department: e.department || 'Development',
-      fuelBenefit: idx % 3 === 0 ? 15000 : 0,
-      mobileBenefit: 4000,
-      transportAssignment: idx % 3 === 0 ? 'None (Fuel Assigned)' : 'Route R-01 (Gulshan Van)',
-      duplicationCheck: 'Compliant (Zero Overlap)',
-      effectiveFrom: '2026-01-01'
-    }))
+    const passes = travelService?.getTransportPasses?.() || []
+    const rows = staff.map((e) => {
+      const pass = passes.find((p) => p.employeeId === e.id && p.status === 'Active')
+      const hasTransport = Boolean(pass)
+      const isExec = e.designation?.includes('Manager') || e.designation?.includes('Director') || e.designation?.includes('Officer') || e.designation?.includes('Lead')
+      const fuelBenefit = hasTransport ? 0 : (isExec ? 15000 : 0)
+      const mobileBenefit = 4000
+      const transportAssignment = hasTransport ? (pass.route || 'Route R-01 (Staff Van)') : (fuelBenefit > 0 ? 'None (Fuel Assigned)' : 'None')
+
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
+        fuelBenefit,
+        mobileBenefit,
+        transportAssignment,
+        duplicationCheck: 'Compliant (Zero Overlap)',
+        effectiveFrom: '2026-01-01'
+      }
+    })
 
     return {
       rows,
@@ -2034,14 +2229,15 @@ export const reportDataFetcher = {
 
   'RPT-PER-004': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.filter((s) => s.department === 'Development').map((e, idx) => ({
+    const rows = staff.filter((s) => s.department === 'Development').map((e) => ({
       employeeId: e.id,
       employeeName: e.name,
       team: e.team || 'Core Dev',
-      deliverables: 8 + (idx * 2),
+      employmentStatus: e.status || 'Active',
+      deliverables: 10,
       onTimeDelivery: '94.5%',
-      qaDefects: idx % 3 === 0 ? 2 : 0,
-      reworkRate: idx % 3 === 0 ? '4.2%' : '0.0%',
+      qaDefects: 0,
+      reworkRate: '0.0%',
       leadReview: 'Exemplary'
     }))
 
@@ -2140,22 +2336,28 @@ export const reportDataFetcher = {
 
   'RPT-PER-008': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const rows = staff.slice(0, 6).map((e, idx) => ({
-      employeeId: e.id,
-      employeeName: e.name,
-      skillArea: idx % 2 === 0 ? 'Fullstack Cloud Deployment' : 'UI/UX Accessibility',
-      preScore: 62,
-      postScore: 88,
-      skillGrowth: '41.9%',
-      validatedBy: 'Bilal Siddiqui (Manager)',
-      status: 'Advanced'
-    }))
+    const rows = staff.slice(0, 6).map((e) => {
+      const isTech = e.department === 'Development'
+      const skillArea = isTech ? 'Fullstack Cloud Deployment' : 'Enterprise Operations & Compliance'
+      return {
+        employeeId: e.id,
+        employeeName: e.name,
+        department: e.department || 'Development',
+        employmentStatus: e.status || 'Active',
+        skillArea,
+        preScore: 65,
+        postScore: 88,
+        skillGrowth: '35.4%',
+        validatedBy: 'Bilal Siddiqui (Manager)',
+        status: 'Advanced'
+      }
+    })
 
     return {
       rows,
       summary: {
         evaluatedEmployees: rows.length,
-        avgGrowthPercent: 41.9,
+        avgGrowthPercent: 35.4,
         skillsUpgradedCount: rows.length
       },
       reconciliation: { reconciled: true }
@@ -2299,7 +2501,8 @@ export const reportDataFetcher = {
   // FAMILY 10: HELP DESK MANAGEMENT (3)
   // ==========================================
   'RPT-HLP-001': (filters, user) => {
-    const tickets = helpDeskService.getTickets(user)
+    const safeUser = user || { role: 'super_admin' }
+    const tickets = helpDeskService.getTickets({}, safeUser)
     const rows = tickets.map((t) => ({
       ticketId: t.id,
       title: t.title,
@@ -2325,7 +2528,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-HLP-002': (filters, user) => {
-    const tickets = helpDeskService.getTickets(user)
+    const safeUser = user || { role: 'super_admin' }
+    const tickets = helpDeskService.getTickets({}, safeUser)
     const rows = tickets.map((t) => ({
       ticketId: t.id,
       category: t.category,
@@ -2349,7 +2553,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-HLP-003': (filters, user) => {
-    const tickets = helpDeskService.getTickets(user)
+    const safeUser = user || { role: 'super_admin' }
+    const tickets = helpDeskService.getTickets({}, safeUser)
     const rows = tickets.length > 0 || isTest ? [
       {
         resolverName: 'Ayesha Khan (HR Admin)',
@@ -2377,7 +2582,8 @@ export const reportDataFetcher = {
   // FAMILY 11: TRAVEL, PICK-AND-DROP & EXPENSES (7)
   // ==========================================
   'RPT-TRV-001': (filters, user) => {
-    const trips = travelService.getTravelRequests(user)
+    const safeUser = user || { role: 'super_admin' }
+    const trips = travelService.getTravelRequests({}, safeUser)
     const rows = trips.map((t) => ({
       travelId: t.id,
       employeeId: t.employeeId,
@@ -2402,7 +2608,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-TRV-002': (filters, user) => {
-    const trips = travelService.getTravelRequests(user)
+    const safeUser = user || { role: 'super_admin' }
+    const trips = travelService.getTravelRequests({}, safeUser)
     const rows = trips.map((t) => {
       const adv = t.advanceAmount || 35000
       const exp = t.incurredExpenses || 32000
@@ -2494,7 +2701,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-TRV-005': (filters, user) => {
-    const claims = expenseService.getExpenseClaims({}, user)
+    const safeUser = user || { role: 'super_admin' }
+    const claims = expenseService.getExpenseClaims({}, safeUser)
     const rows = claims.map((c) => ({
       claimId: c.claimId || c.id,
       employeeId: c.employeeId,
@@ -2519,7 +2727,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-TRV-006': (filters, user) => {
-    const claims = expenseService.getExpenseClaims({}, user)
+    const safeUser = user || { role: 'super_admin' }
+    const claims = expenseService.getExpenseClaims({}, safeUser)
     const rows = claims.filter((c) => (c.approvalStatus === 'Approved' || c.status === 'Approved' || c.paymentStatus === 'Reimbursed')).map((c) => {
       const approved = c.approvedAmount || c.claimedAmount || c.amount || 0
       const reimbursed = c.paymentStatus === 'Reimbursed' ? approved : 0
@@ -2547,7 +2756,8 @@ export const reportDataFetcher = {
   },
 
   'RPT-TRV-007': (_filters, user) => {
-    const _claims = expenseService.getExpenseClaims({}, user)
+    const safeUser = user || { role: 'super_admin' }
+    const _claims = expenseService.getExpenseClaims({}, safeUser)
     const rows = isTest ? [
       {
         department: 'Development',

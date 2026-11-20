@@ -259,7 +259,7 @@ export const INITIAL_LEAVE_LEDGER = [
   { id: 'LED-002-UL', employeeId: 'EMP-002', leaveTypeId: 'LT-UNPAID', openingBalance: 30, earnedAccrued: 0, adjustments: 0, utilized: 0, pending: 0, closingBalance: 30, availableBalance: 30 },
 
   // EMP-003 (Bilal Siddiqui - Manager Dev)
-  { id: 'LED-003-AL', employeeId: 'EMP-003', leaveTypeId: 'LT-ANNUAL', openingBalance: 14, earnedAccrued: 0, adjustments: 0, utilized: 0, pending: 0, closingBalance: 14, availableBalance: 14 },
+  { id: 'LED-003-AL', employeeId: 'EMP-003', leaveTypeId: 'LT-ANNUAL', leaveTypeCode: 'AL', openingBalance: 14, earnedAccrued: 0, adjustments: 0, utilized: 1, pending: 0, closingBalance: 13, availableBalance: 13 },
   { id: 'LED-003-CL', employeeId: 'EMP-003', leaveTypeId: 'LT-CASUAL', openingBalance: 10, earnedAccrued: 0, adjustments: 0, utilized: 2, pending: 0, closingBalance: 8, availableBalance: 8 },
   { id: 'LED-003-SL', employeeId: 'EMP-003', leaveTypeId: 'LT-SICK', openingBalance: 8, earnedAccrued: 0, adjustments: 0, utilized: 1, pending: 0, closingBalance: 7, availableBalance: 7 },
   { id: 'LED-003-EL', employeeId: 'EMP-003', leaveTypeId: 'LT-EMERGENCY', openingBalance: 3, earnedAccrued: 0, adjustments: 0, utilized: 0, pending: 0, closingBalance: 3, availableBalance: 3 },
@@ -298,7 +298,56 @@ export const INITIAL_LEAVE_LEDGER = [
  * Initial Leave Requests demonstrating all workflows & approval tiers
  */
 export const INITIAL_LEAVE_REQUESTS = [
-  // 1. Approved Leave (Ahmed Khan - Casual Leave, 1 day, approved by Team Lead Ali Raza)
+  // 1. Approved Leave (Bilal Siddiqui - Annual Leave, 1 day, approved by Super Admin Tariq Mehmood)
+  {
+    id: 'LV-202611-001',
+    employeeId: 'EMP-003',
+    employeeName: 'Bilal Siddiqui',
+    departmentId: 'DEP-01',
+    departmentName: 'Development',
+    designation: 'Software Engineering Manager',
+    leaveTypeId: 'LT-ANNUAL',
+    leaveTypeName: 'Annual Leave',
+    leaveTypeCode: 'AL',
+    paidTreatment: 'Paid',
+    isPaid: true,
+    isHalfDay: false,
+    halfDayType: null,
+    startDate: '2026-11-18',
+    endDate: '2026-11-18',
+    eligibleWorkingDays: 1.0,
+    calculatedDays: 1.0,
+    calendarDays: 1,
+    reason: 'Personal architectural review and documentation',
+    attachmentUrl: null,
+    status: 'Approved',
+    submittedAt: '2026-11-15 09:30:00',
+    applicantRole: 'manager',
+    currentApproverTier: 'Approved',
+    currentApproverRole: 'Super Admin',
+    currentApproverName: 'Tariq Mehmood',
+    policyVersion: '2026.1',
+    policyId: 'POL-LEAVE-2026-V1',
+    approvalHistory: [
+      {
+        status: 'Submitted',
+        actor: 'Bilal Siddiqui (EMP-003)',
+        timestamp: '2026-11-15 09:30:00',
+        note: 'Submitted 1-day annual leave request.'
+      },
+      {
+        status: 'Approved',
+        actor: 'Tariq Mehmood (Super Admin)',
+        timestamp: '2026-11-16 11:00:00',
+        note: 'Approved 1.0 day annual leave request.'
+      }
+    ],
+    decisionRemarks: 'Approved 1.0 day annual leave request.',
+    decidedBy: 'Tariq Mehmood (Super Admin)',
+    decidedAt: '2026-11-16 11:00:00',
+    integratedWithAttendance: true
+  },
+  // 2. Approved Leave (Ahmed Khan - Casual Leave, 1 day, approved by Team Lead Ali Raza)
   {
     id: 'LV-202611-002',
     employeeId: 'EMP-005',
@@ -708,6 +757,17 @@ export const INITIAL_LEAVE_ADJUSTMENTS = [
  * Initial Immutable Leave Journal Entries
  */
 export const INITIAL_LEAVE_JOURNAL = [
+  {
+    id: 'JRN-SEED-LV-202611-001',
+    employeeId: 'EMP-003',
+    leaveTypeId: 'LT-ANNUAL',
+    eventType: 'Approved Utilization',
+    amount: -1.0,
+    actor: 'Tariq Mehmood (Super Admin)',
+    referenceId: 'LV-202611-001',
+    timestamp: '2026-11-16 11:00:00',
+    notes: 'Utilization posted for approved annual leave LV-202611-001'
+  },
   {
     id: 'JRN-SEED-LV-202611-002',
     employeeId: 'EMP-005',

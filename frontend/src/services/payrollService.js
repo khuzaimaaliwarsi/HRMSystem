@@ -59,28 +59,15 @@ class PayrollService {
   }
 
   _initialize() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.RUNS, null)) {
-        const seededRuns = INITIAL_PAYROLL_RUNS.map((run) => {
-          return this._enrichRunWithEmployees(run)
-        })
-        this._setItem(STORAGE_KEYS.RUNS, seededRuns)
-      }
-      if (!this._getItem(STORAGE_KEYS.PAYSLIPS, null)) {
-        this._setItem(STORAGE_KEYS.PAYSLIPS, {})
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.RUNS] = []
-      this.memoryStorage[STORAGE_KEYS.PAYSLIPS] = {}
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.RUNS)
-          window.localStorage.removeItem(STORAGE_KEYS.PAYSLIPS)
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existing = this._getItem(STORAGE_KEYS.RUNS, null)
+    if (!existing || existing.length === 0) {
+      const seededRuns = INITIAL_PAYROLL_RUNS.map((run) => {
+        return run.employeeBreakdown ? run : this._enrichRunWithEmployees(run)
+      })
+      this._setItem(STORAGE_KEYS.RUNS, seededRuns)
+    }
+    if (!this._getItem(STORAGE_KEYS.PAYSLIPS, null)) {
+      this._setItem(STORAGE_KEYS.PAYSLIPS, {})
     }
   }
 

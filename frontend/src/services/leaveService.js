@@ -80,14 +80,12 @@ class LeaveService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      const existing = this._getItem(STORAGE_KEYS.REQUESTS, null)
-      if (!existing) {
-        this._setItem(STORAGE_KEYS.REQUESTS, INITIAL_LEAVE_REQUESTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.ADJUSTMENTS, null)) {
-        this._setItem(STORAGE_KEYS.ADJUSTMENTS, INITIAL_LEAVE_ADJUSTMENTS)
-      }
+    const existing = this._getItem(STORAGE_KEYS.REQUESTS, null)
+    if (!existing || existing.length === 0) {
+      this._setItem(STORAGE_KEYS.REQUESTS, INITIAL_LEAVE_REQUESTS)
+    }
+    if (!this._getItem(STORAGE_KEYS.ADJUSTMENTS, null)) {
+      this._setItem(STORAGE_KEYS.ADJUSTMENTS, INITIAL_LEAVE_ADJUSTMENTS)
     }
   }
 

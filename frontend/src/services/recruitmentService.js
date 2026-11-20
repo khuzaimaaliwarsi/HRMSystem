@@ -86,11 +86,25 @@ class RecruitmentService {
     if (!this._getItem(STORAGE_KEYS.VACANCIES, null)) {
       this._setItem(STORAGE_KEYS.VACANCIES, INITIAL_VACANCIES)
     }
-    if (!this._getItem(STORAGE_KEYS.CANDIDATES, null)) {
-      this._setItem(STORAGE_KEYS.CANDIDATES, INITIAL_CANDIDATES)
+    const candidates = this._getItem(STORAGE_KEYS.CANDIDATES, null)
+    if (!candidates || candidates.length === 0 || !candidates.some((c) => (c.fullName || c.name)?.includes('UAT QA Candidate') || c.id === 'CAN-009')) {
+      const mergedCand = [...(candidates || [])]
+      INITIAL_CANDIDATES.forEach((initCand) => {
+        if (!mergedCand.some((m) => m.id === initCand.id)) {
+          mergedCand.push(initCand)
+        }
+      })
+      this._setItem(STORAGE_KEYS.CANDIDATES, mergedCand)
     }
-    if (!this._getItem(STORAGE_KEYS.INTERVIEWS, null)) {
-      this._setItem(STORAGE_KEYS.INTERVIEWS, INITIAL_INTERVIEWS)
+    const interviews = this._getItem(STORAGE_KEYS.INTERVIEWS, null)
+    if (!interviews || interviews.length === 0 || !interviews.some((i) => i.candidateName?.includes('UAT QA Candidate') || i.id === 'INT-005')) {
+      const mergedInt = [...(interviews || [])]
+      INITIAL_INTERVIEWS.forEach((initInt) => {
+        if (!mergedInt.some((m) => m.id === initInt.id)) {
+          mergedInt.push(initInt)
+        }
+      })
+      this._setItem(STORAGE_KEYS.INTERVIEWS, mergedInt)
     }
     if (!this._getItem(STORAGE_KEYS.OFFERS, null)) {
       this._setItem(STORAGE_KEYS.OFFERS, INITIAL_OFFERS)

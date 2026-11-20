@@ -589,6 +589,37 @@ export const INITIAL_CANDIDATES = [
       { fromStage: 'Application Received', toStage: 'Initial Screening', actor: 'Noman Bashir', timestamp: '2026-10-14 10:00:00', note: 'Screening conducted' },
       { fromStage: 'Initial Screening', toStage: 'Rejected', actor: 'Noman Bashir', timestamp: '2026-10-15 14:00:00', note: 'Rejected due to skill fit' }
     ]
+  },
+  {
+    id: 'CAN-009',
+    fullName: 'UAT QA Candidate',
+    email: 'uat.qa.candidate@example.com',
+    phone: '+92 300 1234567',
+    city: 'Karachi',
+    currentCompany: 'QA Solutions',
+    currentDesignation: 'QA Automation Engineer',
+    experienceYears: 4.0,
+    education: 'BS Software Engineering',
+    skills: ['Playwright', 'Selenium', 'Node.js', 'PostgreSQL', 'API Testing'],
+    cvResumeRef: 'resume_uat_qa.pdf',
+    expectedSalary: 180000,
+    noticePeriodDays: 15,
+    source: 'Direct Portal Application',
+    assignedRecruiterId: 'EMP-014',
+    assignedRecruiterName: 'Noman Bashir',
+    vacancyId: 'VAC-004',
+    vacancyTitle: 'Junior QA Automation Engineer',
+    departmentId: 'DEP-01',
+    applicationDate: '2026-11-10',
+    stage: 'Interview Scheduled',
+    status: 'Active',
+    rejectionReason: null,
+    linkedEmployeeId: null,
+    notes: [],
+    stageHistory: [
+      { fromStage: null, toStage: 'Application Received', actor: 'System', timestamp: '2026-11-10 10:00:00', note: 'Applied online' },
+      { fromStage: 'Application Received', toStage: 'Interview Scheduled', actor: 'Super Admin', timestamp: '2026-11-15 10:00:00', note: 'Scheduled for Round 1 Technical Interview' }
+    ]
   }
 ]
 
@@ -689,6 +720,25 @@ export const INITIAL_INTERVIEWS = [
     venueMeetingLink: 'Islamabad Office, Sales Pitch Room B',
     status: 'Scheduled',
     notes: 'Candidate will present a 15-minute simulated SaaS sales presentation to enterprise retail clients.',
+    evaluation: null
+  },
+  {
+    id: 'INT-005',
+    candidateId: 'CAN-009',
+    candidateName: 'UAT QA Candidate',
+    candidateEmail: 'uat.qa.candidate@example.com',
+    vacancyId: 'VAC-004',
+    jobTitle: 'Junior QA Automation Engineer',
+    round: 'Round 1 - Technical Screening',
+    type: 'Online',
+    scheduledDate: '2026-11-20',
+    startTime: '11:00',
+    endTime: '12:00',
+    interviewerIds: ['EMP-003'],
+    interviewerNames: ['UAT Dev Manager'],
+    venueMeetingLink: 'https://meet.google.com/isys-uat-qa',
+    status: 'Scheduled',
+    notes: 'Technical assessment of test automation frameworks, API validation, and regression suites.',
     evaluation: null
   }
 ]

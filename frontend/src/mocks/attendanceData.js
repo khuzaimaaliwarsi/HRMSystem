@@ -443,6 +443,38 @@ export const INITIAL_ATTENDANCE_RECORDS = [
     notes: 'Arrived at 09:28 (13 mins past 15-minute grace threshold)'
   },
   {
+    id: 'ATT-20261118-005',
+    employeeId: 'EMP-005',
+    employeeName: 'Ahmed Khan',
+    departmentId: 'DEP-01',
+    departmentName: 'Software Development',
+    date: '2026-11-18',
+    shiftId: 'SHIFT-01',
+    shiftName: 'General Corporate Day Shift',
+    checkInTime: '16:23',
+    checkOutTime: '16:23',
+    totalBreakMinutes: 0,
+    workedHours: 0.0,
+    expectedHours: 8.0,
+    hoursVariance: -8.0,
+    status: 'Half Day',
+    primaryClassification: 'Half Day',
+    isLate: true,
+    lateMinutes: 443,
+    isEarlyExit: true,
+    earlyExitMinutes: 97,
+    isHalfDay: true,
+    workArrangement: 'Field Duty',
+    source: 'Web Check-In',
+    punches: [
+      { id: 'PCH-20261118-01', type: 'IN', timestamp: '2026-11-18 16:23:11', source: 'Web Portal', verified: true },
+      { id: 'PCH-20261118-02', type: 'OUT', timestamp: '2026-11-18 16:23:25', source: 'Web Portal', verified: true }
+    ],
+    verifiedBy: 'PostgreSQL Sync',
+    correctionStatus: 'None',
+    notes: 'Completed Punch-In + Punch-Out with 0 actual worked hours (HALF_DAY)'
+  },
+  {
     id: 'ATT-20261026-006',
     employeeId: 'EMP-006',
     employeeName: 'Usman Tariq',
@@ -797,6 +829,39 @@ export const INITIAL_ATTENDANCE_CORRECTIONS = [
 
 export const INITIAL_WFH_REQUESTS = [
   {
+    id: 'WFH-20261117-001',
+    requestCode: 'WFH-20261117-001',
+    employeeId: 'EMP-005',
+    employeeName: 'Ahmed Khan',
+    departmentId: 'DEP-01',
+    departmentName: 'Software Development',
+    requestedDate: '2026-11-17',
+    startDate: '2026-11-17',
+    endDate: '2026-11-17',
+    totalDays: 1,
+    reason: 'Remote infrastructure optimization & database tuning',
+    workArrangement: 'WFH',
+    deliverablesPlanned: 'PostgreSQL connection pooling configuration and replication testing.',
+    status: 'Approved',
+    hiringManagerId: 'EMP-004',
+    approverName: 'Ali Raza',
+    submittedAt: '2026-11-16 09:00:00',
+    approvalHistory: [
+      {
+        status: 'Submitted',
+        actor: 'Ahmed Khan (EMP-005)',
+        timestamp: '2026-11-16 09:00:00',
+        note: 'Submitted WFH request for 17 Nov'
+      },
+      {
+        status: 'Approved',
+        actor: 'Ali Raza (Team Lead)',
+        timestamp: '2026-11-16 10:30:00',
+        note: 'Approved for scheduled remote maintenance'
+      }
+    ]
+  },
+  {
     id: 'WFH-001',
     employeeId: 'EMP-004',
     employeeName: 'Zeeshan Ali',
@@ -855,6 +920,41 @@ export const INITIAL_WFH_REQUESTS = [
 ]
 
 export const INITIAL_FIELD_DUTY_REQUESTS = [
+  {
+    id: 'FLD-20261118-001',
+    requestCode: 'FLD-20261118-001',
+    employeeId: 'EMP-005',
+    employeeName: 'Ahmed Khan',
+    departmentId: 'DEP-01',
+    departmentName: 'Software Development',
+    visitDate: '2026-11-18',
+    clientName: 'Enterprise Client Site Karachi',
+    purpose: 'On-site technical integration & client field audit',
+    location: 'Karachi Financial District',
+    expectedStartTime: '10:00',
+    expectedEndTime: '15:30',
+    actualStartTime: '10:00',
+    actualEndTime: '15:30',
+    durationHours: 5.5,
+    status: 'Approved',
+    approverRole: 'Super Admin',
+    approverName: 'Tariq Mehmood',
+    submittedAt: '2026-11-17 11:00:00',
+    approvalHistory: [
+      {
+        status: 'Submitted',
+        actor: 'Ahmed Khan (EMP-005)',
+        timestamp: '2026-11-17 11:00:00',
+        note: 'Submitted 5.5-hour client field audit request'
+      },
+      {
+        status: 'Approved',
+        actor: 'Tariq Mehmood (Super Admin)',
+        timestamp: '2026-11-17 12:00:00',
+        note: 'Approved client deployment session'
+      }
+    ]
+  },
   {
     id: 'FLD-001',
     employeeId: 'EMP-007',

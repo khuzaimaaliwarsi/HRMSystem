@@ -91,25 +91,27 @@ class AttendanceService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      if (!this._getItem(STORAGE_KEYS.RECORDS, null)) {
-        this._setItem(STORAGE_KEYS.RECORDS, INITIAL_ATTENDANCE_RECORDS)
-      }
-      if (!this._getItem(STORAGE_KEYS.CORRECTIONS, null)) {
-        this._setItem(STORAGE_KEYS.CORRECTIONS, INITIAL_ATTENDANCE_CORRECTIONS)
-      }
-      if (!this._getItem(STORAGE_KEYS.WFH, null)) {
-        this._setItem(STORAGE_KEYS.WFH, INITIAL_WFH_REQUESTS)
-      }
-      const storedFd = this._getItem(STORAGE_KEYS.FIELD_DUTY, null)
-      if (!storedFd) {
-        this._setItem(STORAGE_KEYS.FIELD_DUTY, INITIAL_FIELD_DUTY_REQUESTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.OVERTIME, null)) {
-        this._setItem(STORAGE_KEYS.OVERTIME, INITIAL_OVERTIME_REQUESTS)
-      }
-      this._reconcilePendingApproverRouting()
+    const existingRecords = this._getItem(STORAGE_KEYS.RECORDS, null)
+    if (!existingRecords || existingRecords.length === 0) {
+      this._setItem(STORAGE_KEYS.RECORDS, JSON.parse(JSON.stringify(INITIAL_ATTENDANCE_RECORDS)))
     }
+    const existingCorrections = this._getItem(STORAGE_KEYS.CORRECTIONS, null)
+    if (!existingCorrections || existingCorrections.length === 0) {
+      this._setItem(STORAGE_KEYS.CORRECTIONS, JSON.parse(JSON.stringify(INITIAL_ATTENDANCE_CORRECTIONS)))
+    }
+    const existingWfh = this._getItem(STORAGE_KEYS.WFH, null)
+    if (!existingWfh || existingWfh.length === 0) {
+      this._setItem(STORAGE_KEYS.WFH, JSON.parse(JSON.stringify(INITIAL_WFH_REQUESTS)))
+    }
+    const storedFd = this._getItem(STORAGE_KEYS.FIELD_DUTY, null)
+    if (!storedFd || storedFd.length === 0) {
+      this._setItem(STORAGE_KEYS.FIELD_DUTY, JSON.parse(JSON.stringify(INITIAL_FIELD_DUTY_REQUESTS)))
+    }
+    const existingOvertime = this._getItem(STORAGE_KEYS.OVERTIME, null)
+    if (!existingOvertime || existingOvertime.length === 0) {
+      this._setItem(STORAGE_KEYS.OVERTIME, JSON.parse(JSON.stringify(INITIAL_OVERTIME_REQUESTS)))
+    }
+    this._reconcilePendingApproverRouting()
   }
 
   _reconcilePendingApproverRouting() {
