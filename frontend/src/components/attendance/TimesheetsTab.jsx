@@ -4,15 +4,14 @@ import StatusBadge from '@/components/common/StatusBadge'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import Alert from '@/components/common/Alert'
+import { attendanceService } from '@/services/attendanceService'
 import { getDateFilterRange, sortByDateDescending, sortByDateAscending, getKarachiToday, formatTimeTo12Hour } from '@/lib/dateUtils'
 
 export function TimesheetsTab({
   records = [],
   currentUser = null,
   overtimeRequests = [],
-  onOpenOvertimeModal,
-  onApproveOvertime,
-  onRejectOvertime
+  onOpenOvertimeModal
 }) {
   const isEmployee = currentUser?.role === 'employee'
   const isSupervisor = !isEmployee // team_lead, manager, hr_admin, super_admin
@@ -33,6 +32,7 @@ export function TimesheetsTab({
   const [decisionNotes, setDecisionNotes] = useState('')
   const [approvedMinutesInput, setApprovedMinutesInput] = useState('')
   const [feedback, setFeedback] = useState(null)
+  const [decisionPending, setDecisionPending] = useState(false)
 
   // Pending count for overtime
   const pendingOvertimeCount = useMemo(() => {
@@ -93,53 +93,48 @@ export function TimesheetsTab({
   const handleOpenDecisionModal = (ot) => {
     setSelectedOvertime(ot)
     setDecisionNotes('')
-    setApprovedMinutesInput(ot.requestedMinutes || 60)
+    setApprovedMinutesInput(ot.durationMinutes ?? ot.requestedMinutes ?? 0)
     setFeedback(null)
   }
 
-  const handleApproveOvertime = (ot) => {
+  const handleApproveOvertime = async (ot) => {
+    setFeedback(null)
+    const requestedMins = Number(ot.durationMinutes ?? ot.requestedMinutes)
+    if (!Number.isInteger(requestedMins) || requestedMins < 60) {
+      setFeedback({ type: 'danger', message: 'Invalid overtime duration. A valid 60+ minute claim is required.' })
+      return
+    }
+    setDecisionPending(true)
     try {
-      setFeedback(null)
-      const mins = Number(approvedMinutesInput) || ot.requestedMinutes || 60
-      onApproveOvertime?.(
-        ot.id,
-        mins,
-        decisionNotes || `Overtime authorized for ${mins} minutes`,
-        currentUser?.name,
-        currentUser?.employeeId,
-        currentUser?.role
+      await attendanceService.approveOvertimeRequestAsync(
+        ot.id, requestedMins, decisionNotes || `Overtime authorized for ${requestedMins} minutes`,
+        currentUser?.name, currentUser?.employeeId, currentUser?.role
       )
-      setFeedback({
-        type: 'success',
-        message: `Overtime claim ${ot.id} (${mins} mins) approved successfully. Attendance ledger synchronized.`
-      })
+      setFeedback({ type: 'success', message: `Overtime ${ot.id}: backend approval confirmed. Refreshing authoritative records.` })
       setSelectedOvertime(null)
       setDecisionNotes('')
-      setTimeout(() => setFeedback(null), 5000)
     } catch (err) {
-      setFeedback({ type: 'danger', message: err.message })
+      setFeedback({ type: 'danger', message: err?.message || 'Backend overtime approval failed.' })
+    } finally {
+      setDecisionPending(false)
     }
   }
 
-  const handleRejectOvertime = (ot) => {
+  const handleRejectOvertime = async (ot) => {
+    setFeedback(null)
+    setDecisionPending(true)
     try {
-      setFeedback(null)
-      onRejectOvertime?.(
-        ot.id,
-        decisionNotes || 'Overtime claim declined by supervisor',
-        currentUser?.name,
-        currentUser?.employeeId,
-        currentUser?.role
+      await attendanceService.rejectOvertimeRequestAsync(
+        ot.id, decisionNotes || 'Overtime claim declined by supervisor',
+        currentUser?.name, currentUser?.employeeId, currentUser?.role
       )
-      setFeedback({
-        type: 'success',
-        message: `Overtime claim ${ot.id} rejected. Official attendance remains unmodified.`
-      })
+      setFeedback({ type: 'success', message: `Overtime ${ot.id}: backend rejection confirmed.` })
       setSelectedOvertime(null)
       setDecisionNotes('')
-      setTimeout(() => setFeedback(null), 5000)
     } catch (err) {
-      setFeedback({ type: 'danger', message: err.message })
+      setFeedback({ type: 'danger', message: err?.message || 'Backend overtime rejection failed.' })
+    } finally {
+      setDecisionPending(false)
     }
   }
 
@@ -383,7 +378,7 @@ export function TimesheetsTab({
                         <td className="p-3 text-right font-mono font-bold text-hrms-primary">{r.workedHours}h</td>
                         <td className="p-3 text-right font-mono text-slate-500">{r.expectedHours}h</td>
                         <td className={`p-3 text-right font-mono font-bold ${r.hoursVariance >= 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
-                          {r.hoursVariance > 0 ? `+${r.hoursVariance}h` : `${r.hoursVariance}h`}
+                          {Number.isFinite(Number(r.hoursVariance)) ? `${Number(r.hoursVariance) > 0 ? '+' : ''}${r.hoursVariance}h` : '—'}
                         </td>
                         <td className="p-3 text-center">
                           <StatusBadge status={r.primaryClassification || r.status} />
@@ -444,7 +439,7 @@ export function TimesheetsTab({
                   <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                     <th className="px-2.5 py-2 whitespace-nowrap">Overtime ID & Staff</th>
                     <th className="px-2 py-2 whitespace-nowrap">Date</th>
-                    <th className="px-2 py-2 whitespace-nowrap font-mono">Actual In - Out</th>
+                    <th className="px-2 py-2 whitespace-nowrap font-mono">Claimed Start – End</th>
                     <th className="px-2 py-2 whitespace-nowrap">Claimed Duration</th>
                     <th className="px-2 py-2">Justification</th>
                     <th className="px-2 py-2 whitespace-nowrap">Approver Route</th>
@@ -464,17 +459,16 @@ export function TimesheetsTab({
                   ) : (
                     filteredOvertime.map((o) => {
                       const isPending = o?.status?.toLowerCase().includes('pending')
-                      const isSuperAdmin = String(currentUser?.role || '').toLowerCase() === 'super_admin'
                       const isSelf = o.employeeId === currentUser?.employeeId
-                      const blockSelf = isSelf && !isSuperAdmin
+                      const blockSelf = isSelf
                       const canDecide = isSupervisor && isPending && !blockSelf
                       const rawMins = o.durationMinutes ?? o.requestedMinutes
                       const otMins = Number.isFinite(Number(rawMins)) && Number(rawMins) > 0 ? Number(rawMins) : 0
                       const otHours = Number.isFinite(Number(o.requestedHours)) && Number(o.requestedHours) > 0
                         ? Number(o.requestedHours)
                         : Math.round((otMins / 60) * 10) / 10
-                      const timeIn = o.actualCheckIn || o.startTime || '—'
-                      const timeOut = o.actualCheckOut || o.endTime || '—'
+                      const timeIn = o.startTime || '—'
+                      const timeOut = o.endTime || '—'
 
                       return (
                         <tr key={o.id} className="hover:bg-slate-50/70 transition-colors">
@@ -488,7 +482,7 @@ export function TimesheetsTab({
                             {o.overtimeDate}
                           </td>
                           <td className="px-2 py-2 font-mono text-slate-700 whitespace-nowrap">
-                            {timeIn} - {timeOut}
+                            {timeIn === '—' ? '—' : formatTimeTo12Hour(timeIn)} – {timeOut === '—' ? '—' : formatTimeTo12Hour(timeOut)}
                           </td>
                           <td className="px-2 py-2 whitespace-nowrap">
                             <span className="font-bold text-slate-900 font-mono">
@@ -591,9 +585,15 @@ export function TimesheetsTab({
                 <span className="font-bold text-slate-800 font-mono text-sm">{selectedOvertime.overtimeDate}</span>
               </div>
               <div>
-                <span className="text-slate-500 text-[10px] uppercase font-bold block">Actual Punches</span>
+                <span className="text-slate-500 text-[10px] uppercase font-bold block">Claimed Start – End</span>
                 <span className="font-bold text-slate-700 font-mono">
-                  {selectedOvertime.actualCheckIn || selectedOvertime.startTime || '—'} - {selectedOvertime.actualCheckOut || selectedOvertime.endTime || '—'}
+                  {selectedOvertime.startTime ? formatTimeTo12Hour(selectedOvertime.startTime) : '—'} – {selectedOvertime.endTime ? formatTimeTo12Hour(selectedOvertime.endTime) : '—'}
+                </span>
+                <span className="text-slate-500 text-[10px] uppercase font-bold block mt-2">Verified Punches</span>
+                <span className="font-bold text-slate-700 font-mono">
+                  {selectedOvertime.attendanceVerified === true && selectedOvertime.actualCheckIn && selectedOvertime.actualCheckOut
+                    ? `${formatTimeTo12Hour(selectedOvertime.actualCheckIn)} – ${formatTimeTo12Hour(selectedOvertime.actualCheckOut)}`
+                    : 'Not verified / no confirmed punch evidence'}
                 </span>
               </div>
               <div>
@@ -640,11 +640,11 @@ export function TimesheetsTab({
                     </label>
                     <input
                       type="number"
-                      min="15"
+                      min="60"
                       max="360"
                       step="15"
-                      value={approvedMinutesInput}
-                      onChange={(e) => setApprovedMinutesInput(e.target.value)}
+                      readOnly
+                       value={approvedMinutesInput}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-bold"
                     />
                   </div>
@@ -653,7 +653,7 @@ export function TimesheetsTab({
                       Calculated Working Hours:
                     </label>
                     <div className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono font-bold text-slate-700">
-                      {Math.round(((Number(approvedMinutesInput) || selectedOvertime.requestedMinutes) / 60) * 10) / 10} hrs
+                       {Math.round((Number(selectedOvertime.durationMinutes ?? selectedOvertime.requestedMinutes ?? 0) / 60) * 10) / 10} hrs
                     </div>
                   </div>
                 </div>
@@ -671,17 +671,20 @@ export function TimesheetsTab({
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <p className="text-[11px] text-amber-800">Server-verified attendance is required for approval. Partial approval is disabled until supported by the backend.</p>
+                 <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
                   <button
                     type="button"
-                    onClick={() => handleRejectOvertime(selectedOvertime)}
+                     onClick={() => handleRejectOvertime(selectedOvertime)}
+                     disabled={decisionPending}
                     className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer"
                   >
                     Reject Overtime
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleApproveOvertime(selectedOvertime)}
+                     onClick={() => handleApproveOvertime(selectedOvertime)}
+                     disabled={decisionPending}
                     className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer"
                   >
                     Approve Overtime
@@ -699,7 +702,7 @@ export function TimesheetsTab({
 
               <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
                 {(selectedOvertime.approvalHistory || []).length === 0 ? (
-                  <div className="p-3 text-center text-slate-400 italic">No historical audit events logged.</div>
+                  <div className="p-3 text-center text-slate-400 italic">No server-provided audit events available. This does not prove that no historical events exist.</div>
                 ) : (
                   (selectedOvertime.approvalHistory || []).map((h, idx) => (
                     <div key={idx} className="p-2.5 flex items-start justify-between gap-3 text-[11px]">

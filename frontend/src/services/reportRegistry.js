@@ -811,7 +811,7 @@ export const REPORT_REGISTRY = [
       { key: 'taxDeduction', label: 'Tax (Sec 149)', align: 'right', type: 'currency', width: 15 },
       { key: 'loanDeduction', label: 'Loan Recovery', align: 'right', type: 'currency', width: 14 },
       { key: 'unpaidLeaveDeduction', label: 'Unpaid Leave', align: 'right', type: 'currency', width: 14 },
-      { key: 'netSalary', label: 'Net Disbursed', align: 'right', type: 'currency', width: 16 },
+      { key: 'netSalary', label: 'Net Payable', align: 'right', type: 'currency', width: 16 },
       { key: 'status', label: 'Run Status', align: 'center', width: 14 }
     ],
     summaryKeys: ['totalGrossEarnings', 'totalTaxDeductions', 'totalLoanRecoveries', 'totalNetDisbursed'],

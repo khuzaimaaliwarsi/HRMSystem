@@ -21,22 +21,79 @@ describe('BUG-023: Overtime Approval, RBAC Scoping & Super Admin Universal Autho
     }
   })
 
-  it('1. Canonical Routing: OT-261119-001 routes to UAT Dev Manager (EMP-004), not Ali Raza', () => {
-    const list = attendanceService.getOvertimeRequests()
-    const ot = list.find((o) => o.id === 'OT-261119-001' || o.requestCode === 'OT-261119-001')
+  it('1. Production safety: never invent OT-261119-001; preserve backend-synced approver identity', () => {
+    const overtimeKey = 'isysware_hrms_f04_overtime_requests_v1'
+    attendanceService._setItem(overtimeKey, [])
+    assert.ok(
+      !attendanceService.getOvertimeRequests().some((o) => o.id === 'OT-261119-001'),
+      'Empty PostgreSQL sync must not produce a synthetic production overtime claim'
+    )
 
-    assert.ok(ot, 'OT-261119-001 must exist')
-    assert.strictEqual(ot.employeeId, 'EMP-005', 'Target employee must be EMP-005')
-    assert.strictEqual(ot.currentApproverId, 'EMP-004', 'Must route to Direct Reporting Team Lead EMP-004')
-    assert.strictEqual(ot.approverName, 'UAT Dev Manager', 'Approver name must be UAT Dev Manager, not Ali Raza')
+    // Isolated backend-response fixture. This tests presentation/preservation, NOT actual DB routing.
+    attendanceService._setItem(overtimeKey, [{
+      id: 'OT-261119-001',
+      requestCode: 'OT-261119-001',
+      employeeId: 'EMP-005',
+      employeeName: 'UAT Dev Employee A',
+      overtimeDate: '2026-11-19',
+      startTime: '18:00',
+      endTime: '20:00',
+      requestedMinutes: 120,
+      status: 'Pending Team Lead Review',
+      currentApproverId: 'EMP-004',
+      approverName: 'UAT Dev Manager',
+      currentApproverRole: 'Team Lead',
+      approvalHistory: []
+    }])
+    const ot = attendanceService.getOvertimeRequests().find((o) => o.id === 'OT-261119-001')
+    assert.ok(ot, 'Backend-synced fixture must remain visible')
+    assert.strictEqual(ot.employeeId, 'EMP-005')
+    assert.strictEqual(ot.currentApproverId, 'EMP-004')
+    assert.strictEqual(ot.approverName, 'UAT Dev Manager')
     assert.strictEqual(ot.currentApproverRole, 'Team Lead')
     assert.strictEqual(ot.status, 'Pending Team Lead Review')
-    assert.notStrictEqual(ot.approverName, 'Ali Raza', 'Must never display hardcoded Ali Raza')
+    assert.notStrictEqual(ot.approverName, 'Ali Raza')
   })
 
-  it('2. Super Admin Universal Authority: Super Admin can approve pending overtime assigned to Team Lead', () => {
+  it('2. Super Admin authority: isolated pending claim with attendance evidence can be reviewed', () => {
+    // Fixture is kept strictly inside the test's in-memory state, not production PostgreSQL.
+    const requestKey = 'isysware_hrms_f04_overtime_requests_v1'
+    const attendanceKey = 'isysware_hrms_f04_attendance_records_v1'
+    attendanceService._setItem(requestKey, [{
+      id: 'OT-QA-SA-01',
+      requestCode: 'OT-QA-SA-01',
+      employeeId: 'EMP-005',
+      employeeName: 'UAT Dev Employee A',
+      overtimeDate: '2026-11-19',
+      startTime: '18:00',
+      endTime: '20:00',
+      requestedMinutes: 120,
+      durationMinutes: 120,
+      status: 'Pending Team Lead Review',
+      currentApproverId: 'EMP-004',
+      approverName: 'UAT Dev Manager',
+      approvalHistory: []
+    }])
+    attendanceService._setItem(attendanceKey, [{
+      id: 'ATT-QA-SA-01',
+      employeeId: 'EMP-005',
+      employeeName: 'UAT Dev Employee A',
+      date: '2026-11-19',
+      checkInTime: '17:30',
+      checkOutTime: '20:15',
+      workedHours: 2.75,
+      expectedHours: 8,
+      primaryClassification: 'Present',
+      status: 'Present',
+      punches: [
+        { type: 'IN', timestamp: '2026-11-19 17:30:00', verified: true },
+        { type: 'OUT', timestamp: '2026-11-19 20:15:00', verified: true }
+      ],
+      overtimeHours: 0
+    }])
+
     const approved = attendanceService.approveOvertimeRequest(
-      'OT-261119-001',
+      'OT-QA-SA-01',
       120,
       'Super Admin direct operational approval',
       'Super Admin',
@@ -47,13 +104,12 @@ describe('BUG-023: Overtime Approval, RBAC Scoping & Super Admin Universal Autho
     assert.strictEqual(approved.status, 'Approved')
     assert.strictEqual(approved.approvedMinutes, 120)
     assert.strictEqual(approved.approvedHours, 2.0)
-    assert.ok(approved.decidedBy.includes('Super Admin'), 'DecidedBy must reflect Super Admin')
+    assert.ok(approved.decidedBy.includes('Super Admin'))
     assert.ok(approved.approvalHistory.some((h) => h.status === 'Approved' && h.actor.includes('Super Admin')))
 
-    // Verify attendance synchronization
     const records = attendanceService.getAttendanceRecords({ employeeId: 'EMP-005', date: '2026-11-19' })
-    const rec = records.find((r) => r.date === '2026-11-19')
-    assert.ok(rec, 'Attendance record for 2026-11-19 must be synchronized')
+    const rec = records.find((r) => r.id === 'ATT-QA-SA-01')
+    assert.ok(rec, 'Existing attendance evidence must remain present')
     assert.strictEqual(rec.overtimeHours, 2.0)
     assert.strictEqual(rec.overtimeApproved, true)
     assert.strictEqual(rec.overtimeStatus, 'Approved')

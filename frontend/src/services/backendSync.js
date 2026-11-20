@@ -627,8 +627,8 @@ export async function syncAttendanceAndShifts() {
         const hours = Number.isFinite(Number(o.requestedHours)) && Number(o.requestedHours) > 0
           ? Number(o.requestedHours)
           : Math.round((mins / 60) * 10) / 10
-        const timeIn = o.startTime || o.actualCheckIn || '18:00'
-        const timeOut = o.endTime || o.actualCheckOut || '20:00'
+        const timeIn = o.startTime || null
+        const timeOut = o.endTime || null
         const deptName = o.employee?.department?.name || o.departmentName || 'Software Development'
         const empCode = o.employee?.employeeCode || o.employeeId
         const empFullName = o.employee
@@ -678,8 +678,10 @@ export async function syncAttendanceAndShifts() {
           employeeName: empFullName,
           departmentName: deptName,
           overtimeDate: o.overtimeDate ? new Date(o.overtimeDate).toISOString().slice(0, 10) : '',
-          actualCheckIn: timeIn,
-          actualCheckOut: timeOut,
+          // Never turn the employee's requested time into a verified attendance punch.
+          actualCheckIn: o.attendanceVerified === true ? (o.actualCheckIn || null) : null,
+          actualCheckOut: o.attendanceVerified === true ? (o.actualCheckOut || null) : null,
+          attendanceVerified: o.attendanceVerified === true,
           startTime: timeIn,
           endTime: timeOut,
           durationMinutes: mins,
@@ -698,6 +700,7 @@ export async function syncAttendanceAndShifts() {
           decidedAt: o.reviewedAt ? new Date(o.reviewedAt).toISOString().replace('T', ' ').slice(0, 19) : null,
           decisionRemarks: o.decisionRemarks || null,
           decisionNotes: o.decisionRemarks || null,
+          approvalHistory: Array.isArray(o.approvalHistory) ? o.approvalHistory : [],
           submittedAt: o.appliedAt ? new Date(o.appliedAt).toISOString().replace('T', ' ').slice(0, 19) : ''
         }
       })

@@ -19,8 +19,8 @@ export function ShiftAssignmentTab({
   const { user } = useAuth()
   const activeUser = currentUser || user
   const roleStr = String(activeUser?.role || activeUser?.portalRole || '').toLowerCase().replace(/[^a-z]/g, '')
-  const isSuperAdminByRole = roleStr.includes('superadmin') || roleStr === 'admin' || activeUser?.username === 'superadmin'
-  const isSuperAdminByPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/super-admin')
+  const isSuperAdminByRole = roleStr.includes('superadmin') || roleStr === 'admin' || activeUser?.username === 'superadmin' || activeUser?.role === 'super_admin'
+  const isSuperAdminByPath = typeof window !== 'undefined' && (window.location.pathname.startsWith('/super-admin') || window.location.pathname.startsWith('/admin'))
   const isSuperAdminPortal = isSuperAdminByRole || isSuperAdminByPath
   const portalDefaultAssigner = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || 'HR Admin')
 
@@ -59,10 +59,14 @@ export function ShiftAssignmentTab({
     }
 
     let assignedByDisplay = a.assignedByName || a.assignedBy
-    if (!assignedByDisplay || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
-      assignedByDisplay = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || portalDefaultAssigner)
-    } else if (isSuperAdminPortal && (assignedByDisplay === 'HR Admin' || assignedByDisplay === 'HR Administrator')) {
-      assignedByDisplay = activeUser?.name || 'Super Admin'
+    if (isSuperAdminPortal) {
+      if (!assignedByDisplay || assignedByDisplay === 'HR Admin' || assignedByDisplay === 'HR Administrator' || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
+        assignedByDisplay = 'Super Admin'
+      }
+    } else {
+      if (!assignedByDisplay || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
+        assignedByDisplay = activeUser?.name || portalDefaultAssigner
+      }
     }
 
     const effectiveUntilDisplay =

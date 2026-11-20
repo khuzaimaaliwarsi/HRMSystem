@@ -109,12 +109,14 @@ class AttendanceService {
     }
     const existingOvertime = this._getItem(STORAGE_KEYS.OVERTIME, null)
     if (!existingOvertime || existingOvertime.length === 0) {
-      this._setItem(STORAGE_KEYS.OVERTIME, JSON.parse(JSON.stringify(INITIAL_OVERTIME_REQUESTS)))
+      this._setItem(STORAGE_KEYS.OVERTIME, (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) ? JSON.parse(JSON.stringify(INITIAL_OVERTIME_REQUESTS)) : [])
     }
     this._reconcilePendingApproverRouting()
   }
 
   _reconcilePendingApproverRouting() {
+    // Legacy mock re-routing is test-only; PostgreSQL owns production routing/audit.
+    if (!(typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT)) return
     try {
       let correctionsChanged = false
       const corrections = this._getItem(STORAGE_KEYS.CORRECTIONS, null)
@@ -254,45 +256,7 @@ class AttendanceService {
           }
         })
 
-        // Ensure canonical OT-261119-001 (EMP-005) is initialized with dynamic approver
-        const hasOt261119 = overtime.some((o) => o.id === 'OT-261119-001' || o.requestCode === 'OT-261119-001')
-        if (!hasOt261119) {
-          overtime.unshift({
-            id: 'OT-261119-001',
-            requestCode: 'OT-261119-001',
-            employeeId: 'EMP-005',
-            employeeName: 'Ahmed Khan',
-            departmentId: 'DEP-01',
-            departmentName: 'Software Development',
-            overtimeDate: '2026-11-19',
-            startTime: '18:00',
-            endTime: '20:00',
-            actualCheckIn: '18:00',
-            actualCheckOut: '20:00',
-            durationMinutes: 120,
-            requestedMinutes: 120,
-            requestedHours: 2.0,
-            reason: 'Emergency database performance patch and cloud database migration during low-traffic window.',
-            managerRecommendation: 'Recommended',
-            status: 'Pending Team Lead Review',
-            currentApproverId: 'EMP-004',
-            approverId: 'EMP-004',
-            currentApproverName: leadName,
-            approverName: leadName,
-            currentApproverRole: 'Team Lead',
-            approverRole: 'Team Lead',
-            submittedAt: '2026-11-19 18:05:00',
-            approvalHistory: [
-              {
-                status: 'Submitted',
-                actor: 'Ahmed Khan (EMP-005)',
-                timestamp: '2026-11-19 18:05:00',
-                note: 'Overtime request for 120 minutes (18:00 - 20:00)'
-              }
-            ]
-          })
-          overtimeChanged = true
-        }
+        // Never synthesize this claim; PostgreSQL is the source of truth.
 
         if (overtimeChanged) {
           this._setItem(STORAGE_KEYS.OVERTIME, overtime)
@@ -1483,73 +1447,52 @@ class AttendanceService {
   }
 
   async submitOvertimeRequestAsync(data, actor = 'Employee') {
-    const { apiClient } = await import('./apiClient.js')
-    if (typeof window !== 'undefined') {
-      const res = await apiClient.post('/attendance/overtime', {
-        employeeId: data.employeeCuid || data.employeeId,
-        overtimeDate: data.overtimeDate || data.date,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        durationMinutes: Number(data.durationMinutes),
-        reason: data.reason
-      })
-      const saved = res?.data || res
-      if (saved?.id) data.cuid = saved.id
+    if (typeof window === 'undefined') {
+      return this.submitOvertimeRequest ? this.submitOvertimeRequest(data, actor) : data
     }
-    return this.submitOvertimeRequest ? this.submitOvertimeRequest(data, actor) : data
+    const { apiClient } = await import('./apiClient.js')
+    const res = await apiClient.post('/attendance/overtime', {
+      employeeId: data.employeeCuid || data.employeeId,
+      overtimeDate: data.overtimeDate || data.date,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      durationMinutes: Number(data.durationMinutes),
+      reason: data.reason
+    })
+    const { syncAttendanceAndShifts } = await import('./backendSync.js')
+    await syncAttendanceAndShifts()
+    return res?.data || res
   }
 
+  // Backend-only overtime decisions: never show a local success when PostgreSQL rejected the review.
   async approveOvertimeRequestAsync(id, approvedMinutes, notes = '', actor = 'Super Admin', actorId = null, actorRole = 'super_admin') {
-    let mins = approvedMinutes
-    let decNotes = notes
-    let actorName = actor
-    let aId = actorId
-    let role = actorRole
-
-    // Overload check: approveOvertimeRequestAsync(id, notes, actor)
-    if (typeof approvedMinutes === 'string' && isNaN(Number(approvedMinutes))) {
-      mins = null
-      decNotes = approvedMinutes
-      actorName = notes || 'Super Admin'
-      aId = actor || null
-      role = actorId || 'super_admin'
+    if (typeof window === 'undefined') throw new Error('Overtime approval requires an authenticated backend session.')
+    const { apiClient } = await import('./apiClient.js')
+    const ot = this.getOvertimeRequestById ? this.getOvertimeRequestById(id) : null
+    const targetId = ot?.cuid || id
+    const expectedMinutes = Number(ot?.durationMinutes ?? ot?.requestedMinutes)
+    if (Number.isFinite(expectedMinutes) && Number(approvedMinutes) !== expectedMinutes) {
+      throw new Error('Partial overtime approval is unsupported by this backend. Approve the claimed duration only.')
     }
-
-    if (typeof window !== 'undefined') {
-      try {
-        const { apiClient } = await import('./apiClient.js')
-        const ot = this.getOvertimeRequestById ? this.getOvertimeRequestById(id) : null
-        const targetId = ot?.cuid || id
-        await apiClient.patch(`/attendance/overtime/${targetId}/review`, {
-          decision: 'APPROVED',
-          remarks: decNotes || 'Approved'
-        })
-      } catch (err) {
-        console.warn('[AttendanceService] Remote overtime approval sync failed (non-fatal):', err)
-      }
-    }
-    return this.approveOvertimeRequest
-      ? this.approveOvertimeRequest(id, mins, decNotes, actorName, aId, role)
-      : null
+    const result = await apiClient.patch(`/attendance/overtime/${encodeURIComponent(targetId)}/review`, {
+      decision: 'APPROVED', remarks: notes || 'Approved'
+    })
+    const { syncAttendanceAndShifts } = await import('./backendSync.js')
+    await syncAttendanceAndShifts()
+    return result?.data || result
   }
 
   async rejectOvertimeRequestAsync(id, notes = '', actor = 'Super Admin', actorId = null, actorRole = 'super_admin') {
-    if (typeof window !== 'undefined') {
-      try {
-        const { apiClient } = await import('./apiClient.js')
-        const ot = this.getOvertimeRequestById ? this.getOvertimeRequestById(id) : null
-        const targetId = ot?.cuid || id
-        await apiClient.patch(`/attendance/overtime/${targetId}/review`, {
-          decision: 'REJECTED',
-          remarks: notes || 'Rejected'
-        })
-      } catch (err) {
-        console.warn('[AttendanceService] Remote overtime rejection sync failed (non-fatal):', err)
-      }
-    }
-    return this.rejectOvertimeRequest
-      ? this.rejectOvertimeRequest(id, notes, actor, actorId, actorRole)
-      : null
+    if (typeof window === 'undefined') throw new Error('Overtime rejection requires an authenticated backend session.')
+    const { apiClient } = await import('./apiClient.js')
+    const ot = this.getOvertimeRequestById ? this.getOvertimeRequestById(id) : null
+    const targetId = ot?.cuid || id
+    const result = await apiClient.patch(`/attendance/overtime/${encodeURIComponent(targetId)}/review`, {
+      decision: 'REJECTED', remarks: notes || 'Rejected'
+    })
+    const { syncAttendanceAndShifts } = await import('./backendSync.js')
+    await syncAttendanceAndShifts()
+    return result?.data || result
   }
 
   async checkInAsync(employeeId, data = {}) {
@@ -2634,6 +2577,9 @@ class AttendanceService {
   }
 
   approveOvertimeRequest(id, approvedMinutes, notes = '', actor = 'Bilal Siddiqui', actorId = null, actorRole = 'manager') {
+    if (typeof window !== 'undefined' && !(typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT)) {
+      throw new Error('Production overtime decisions must use the authenticated PostgreSQL async API.')
+    }
     let actorName = actor
     let role = actorRole
     let aId = actorId
@@ -2775,6 +2721,9 @@ class AttendanceService {
   }
 
   rejectOvertimeRequest(id, notes = '', actor = 'Bilal Siddiqui', actorId = null, actorRole = 'manager') {
+    if (typeof window !== 'undefined' && !(typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT)) {
+      throw new Error('Production overtime decisions must use the authenticated PostgreSQL async API.')
+    }
     let actorName = actor
     let role = actorRole
     let aId = actorId

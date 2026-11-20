@@ -5,7 +5,60 @@
  */
 
 import { prisma } from '../config/database.js'
-import { getKarachiDate, timeToMinutes } from '../utils/time.js'
+import { getKarachiDate, getKarachiTime, timeToMinutes } from '../utils/time.js'
+
+/** Read-only evidence evaluation. Claimed times never count as punched time. */
+function verifyOvertimePunchEvidence(ot, attendance) {
+  const denied = (reason) => ({ verified: false, reason, actualCheckIn: null, actualCheckOut: null })
+  if (!attendance || !attendance.firstCheckIn || !attendance.lastCheckOut || Number(attendance.actualWorkMinutes) <= 0) {
+    return denied('no completed positive-work attendance session')
+  }
+  if (attendance.status === 'ABSENT') return denied('attendance is absent')
+  const punches = Array.isArray(attendance.punches) ? attendance.punches : []
+  const ins = punches.filter((p) => p.punchType === 'CHECK_IN' && p.punchTime)
+  const outs = punches.filter((p) => p.punchType === 'CHECK_OUT' && p.punchTime)
+  if (!ins.length || !outs.length) return denied('no matching immutable CHECK_IN and CHECK_OUT audit events')
+  const date = getKarachiDate(ot.overtimeDate)
+  const tomorrow = getKarachiDate(new Date(new Date(`${date}T12:00:00Z`).getTime() + 86400000))
+  const toAbsolute = (p) => {
+    const punchDate = getKarachiDate(p.punchTime)
+    const base = punchDate === date ? 0 : punchDate === tomorrow ? 1440 : NaN
+    return base + timeToMinutes(getKarachiTime(p.punchTime))
+  }
+  const claimStart = timeToMinutes(ot.startTime)
+  let claimEnd = timeToMinutes(ot.endTime)
+  if (claimEnd < claimStart) claimEnd += 1440
+  if (!Number.isFinite(claimStart) || !Number.isFinite(claimEnd) || claimEnd <= claimStart ||
+      Number(attendance.actualWorkMinutes) < claimEnd - claimStart) {
+    return denied('recorded worked minutes are insufficient for this claim')
+  }
+  // Require one continuous real IN/OUT session covering the entire claimed window.
+  const sorted = [...punches].filter((p) => p.punchTime && ['CHECK_IN', 'CHECK_OUT'].includes(p.punchType))
+    .sort((a, b) => new Date(a.punchTime).getTime() - new Date(b.punchTime).getTime())
+  let activeIn = null
+  let covering = null
+  for (const event of sorted) {
+    if (event.punchType === 'CHECK_IN') {
+      activeIn = event
+    } else if (activeIn) {
+      const actualStart = toAbsolute(activeIn)
+      const actualEnd = toAbsolute(event)
+      if (Number.isFinite(actualStart) && Number.isFinite(actualEnd) &&
+          actualStart <= claimStart && actualEnd >= claimEnd && actualEnd >= actualStart) {
+        covering = { in: activeIn, out: event }
+        break
+      }
+      activeIn = null
+    }
+  }
+  if (!covering) return denied('no continuous verified punch session covers the requested overtime interval')
+  return {
+    verified: true,
+    reason: null,
+    actualCheckIn: getKarachiTime(covering.in.punchTime),
+    actualCheckOut: getKarachiTime(covering.out.punchTime)
+  }
+}
 
 export const overtimeService = {
   /**
@@ -40,17 +93,20 @@ export const overtimeService = {
     }
     const resolvedEmployeeId = emp.id
 
-    // Calculate duration in minutes if not provided
+    // Requested duration must match start/end times. Client cannot override the policy.
     const startMin = timeToMinutes(startTime)
     const endMin = timeToMinutes(endTime)
-    const calculatedDuration = durationMinutes
-      ? parseInt(durationMinutes, 10)
-      : endMin >= startMin
-      ? endMin - startMin
-      : 1440 - startMin + endMin
-
-    // POLICY RULE: Minimum duration controlled by configured policy (defaults to 60 minutes)
-    const policyMinMinutes = data.policyMinimumMinutes !== undefined ? parseInt(data.policyMinimumMinutes, 10) : 60
+    const calculatedDuration = endMin > startMin ? endMin - startMin : 1440 - startMin + endMin
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || startMin === endMin ||
+        !Number.isInteger(calculatedDuration) || calculatedDuration <= 0 || calculatedDuration > 1440 ||
+        (durationMinutes !== undefined && durationMinutes !== null && Number(durationMinutes) !== calculatedDuration)) {
+      const error = new Error('Invalid overtime interval or duration mismatch; submitted minutes must match the claimed time window.')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
+    // Minimum policy must come from trusted server configuration, never request body.
+    const policyMinMinutes = 60
     if (calculatedDuration < policyMinMinutes) {
       const error = new Error(`Overtime policy violation: Minimum overtime duration is ${policyMinMinutes} minutes as per company policy. Requested: ${calculatedDuration} minutes.`)
       error.code = 'MINIMUM_DURATION_VIOLATION'
@@ -122,81 +178,79 @@ export const overtimeService = {
       throw error
     }
 
-    // ANTI-SELF-APPROVAL GUARD: Super Admin can approve, others cannot self-approve
-    const isSuperAdmin = reviewerUser?.role === 'SUPER_ADMIN'
-    const isHrAdmin = reviewerUser?.role === 'HR_ADMIN'
-    if (!isSuperAdmin && reviewerUser?.employee?.id && reviewerUser.employee.id === ot.employeeId) {
-      const error = new Error('Anti-Self-Approval Violation: You cannot approve or reject your own overtime request.')
+    // Fail-closed backend RBAC: frontend role labels are never authority.
+    const allowedRoles = ['SUPER_ADMIN', 'HR_ADMIN', 'DEPT_MANAGER', 'TEAM_LEAD']
+    if (!reviewerUser?.id || !allowedRoles.includes(reviewerUser.role)) {
+      const error = new Error('Authenticated overtime reviewer role is not authorized.')
+      error.code = 'UNAUTHORIZED_ROLE'
+      error.status = 403
+      throw error
+    }
+    const actorEmployeeId = reviewerUser.employee?.id || reviewerUser.employeeId || null
+    if (actorEmployeeId && actorEmployeeId === ot.employeeId) {
+      const error = new Error('Anti-Self-Approval Violation: You cannot review your own overtime request.')
       error.code = 'SELF_APPROVAL_PROHIBITED'
       error.status = 403
       throw error
     }
-
-    // RBAC SCOPE VALIDATION: Super Admin & HR Admin have universal review authority.
-    // Managers & Team Leads must strictly follow authorized organizational scope.
-    if (!isSuperAdmin && !isHrAdmin) {
-      if (reviewerUser?.role === 'DEPT_MANAGER') {
-        const mgrDeptId = reviewerUser.employee?.departmentId
-        if (mgrDeptId && ot.employee?.departmentId && mgrDeptId !== ot.employee.departmentId) {
-          const error = new Error('Cross-department authorization violation: Cannot review overtime requests outside your department.')
-          error.code = 'UNAUTHORIZED_SCOPE'
-          error.status = 403
-          throw error
-        }
-      } else if (reviewerUser?.role === 'TEAM_LEAD') {
-        const leadTeamId = reviewerUser.employee?.teamId
-        if (leadTeamId && ot.employee?.teamId && leadTeamId !== ot.employee.teamId) {
-          const error = new Error('Unauthorized: Team Leads can only review requests for employees in their assigned team.')
-          error.code = 'UNAUTHORIZED_SCOPE'
-          error.status = 403
-          throw error
-        }
-      } else if (reviewerUser?.role === 'EMPLOYEE') {
-        const error = new Error('Unauthorized: Employees do not have review authority for overtime requests.')
-        error.code = 'UNAUTHORIZED_ROLE'
+    if (reviewerUser.role === 'DEPT_MANAGER') {
+      const mgrDeptId = reviewerUser.employee?.departmentId
+      if (!mgrDeptId || !ot.employee?.departmentId || mgrDeptId !== ot.employee.departmentId) {
+        const error = new Error('Cross-department or unscoped overtime review is forbidden.')
+        error.code = 'UNAUTHORIZED_SCOPE'
+        error.status = 403
+        throw error
+      }
+    } else if (reviewerUser.role === 'TEAM_LEAD') {
+      const leadTeamId = reviewerUser.employee?.teamId
+      if (!leadTeamId || !ot.employee?.teamId || leadTeamId !== ot.employee.teamId) {
+        const error = new Error('Unassigned or cross-team overtime review is forbidden.')
+        error.code = 'UNAUTHORIZED_SCOPE'
         error.status = 403
         throw error
       }
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // ATTENDANCE VERIFICATION BEFORE PAYROLL ELIGIBILITY:
-      // If approved, verify linked attendance record and ensure employee was not ABSENT
+      let verifiedAttendanceId = null
       if (decision === 'APPROVED') {
         const attRecord = await tx.attendanceRecord.findUnique({
-          where: {
-            employeeId_attendanceDate: {
-              employeeId: ot.employeeId,
-              attendanceDate: ot.overtimeDate
-            }
-          }
+          where: { employeeId_attendanceDate: { employeeId: ot.employeeId, attendanceDate: ot.overtimeDate } },
+          include: { punches: true }
         })
-
-        if (attRecord) {
-          if (attRecord.status === 'ABSENT') {
-            const error = new Error('Attendance verification failed: Employee attendance status is ABSENT on this date. Overtime cannot be approved for absent days.')
-            error.code = 'ATTENDANCE_VERIFICATION_FAILED'
-            error.status = 400
-            throw error
-          }
-          await tx.attendanceRecord.update({
-            where: { id: attRecord.id },
-            data: {
-              overtimeMinutes: { increment: ot.durationMinutes }
-            }
-          })
+        const evidence = verifyOvertimePunchEvidence(ot, attRecord)
+        if (!evidence.verified) {
+          const error = new Error(`Overtime approval blocked: ${evidence.reason}. Claimed time is not actual punch evidence.`)
+          error.code = 'ATTENDANCE_VERIFICATION_FAILED'
+          error.status = 400
+          throw error
         }
+        verifiedAttendanceId = attRecord.id
       }
 
-      return tx.overtimeRequest.update({
-        where: { id: ot.id },
+      // Atomic status transition avoids double approval/double overtime-minute increments.
+      const updated = await tx.overtimeRequest.updateMany({
+        where: { id: ot.id, status: 'PENDING' },
         data: {
           status: decision,
-          reviewedById: reviewerUser?.id || null,
+          reviewedById: reviewerUser.id,
           reviewedAt: new Date(),
           decisionRemarks: remarks?.trim() || null
         }
       })
+      if (updated.count !== 1) {
+        const error = new Error('Overtime claim was already reviewed. Reload the queue.')
+        error.code = 'ALREADY_PROCESSED'
+        error.status = 409
+        throw error
+      }
+      if (verifiedAttendanceId) {
+        await tx.attendanceRecord.update({
+          where: { id: verifiedAttendanceId },
+          data: { overtimeMinutes: { increment: ot.durationMinutes } }
+        })
+      }
+      return tx.overtimeRequest.findUnique({ where: { id: ot.id } })
     })
 
     return result
@@ -261,12 +315,23 @@ export const overtimeService = {
       })
     }
 
-    return ots.map((o) => {
+    // Read-only evidence projection; never generate punches from submitted start/end times.
+    const evidenceList = await Promise.all(ots.map(async (o) => {
+      const record = await prisma.attendanceRecord.findUnique({
+        where: { employeeId_attendanceDate: { employeeId: o.employeeId, attendanceDate: o.overtimeDate } },
+        include: { punches: true }
+      })
+      return verifyOvertimePunchEvidence(o, record)
+    }))
+    return ots.map((o, i) => {
       const rev = o.reviewedById ? reviewerMap[o.reviewedById] : null
       return {
         ...o,
         reviewedByName: rev?.name || null,
-        reviewedByRole: rev?.role || null
+        reviewedByRole: rev?.role || null,
+        attendanceVerified: evidenceList[i].verified,
+        actualCheckIn: evidenceList[i].verified ? evidenceList[i].actualCheckIn : null,
+        actualCheckOut: evidenceList[i].verified ? evidenceList[i].actualCheckOut : null
       }
     })
   }
