@@ -124,6 +124,7 @@ export const overtimeService = {
 
     // ANTI-SELF-APPROVAL GUARD: Super Admin can approve, others cannot self-approve
     const isSuperAdmin = reviewerUser?.role === 'SUPER_ADMIN'
+    const isHrAdmin = reviewerUser?.role === 'HR_ADMIN'
     if (!isSuperAdmin && reviewerUser?.employee?.id && reviewerUser.employee.id === ot.employeeId) {
       const error = new Error('Anti-Self-Approval Violation: You cannot approve or reject your own overtime request.')
       error.code = 'SELF_APPROVAL_PROHIBITED'
@@ -131,8 +132,36 @@ export const overtimeService = {
       throw error
     }
 
+    // RBAC SCOPE VALIDATION: Super Admin & HR Admin have universal review authority.
+    // Managers & Team Leads must strictly follow authorized organizational scope.
+    if (!isSuperAdmin && !isHrAdmin) {
+      if (reviewerUser?.role === 'DEPT_MANAGER') {
+        const mgrDeptId = reviewerUser.employee?.departmentId
+        if (mgrDeptId && ot.employee?.departmentId && mgrDeptId !== ot.employee.departmentId) {
+          const error = new Error('Cross-department authorization violation: Cannot review overtime requests outside your department.')
+          error.code = 'UNAUTHORIZED_SCOPE'
+          error.status = 403
+          throw error
+        }
+      } else if (reviewerUser?.role === 'TEAM_LEAD') {
+        const leadTeamId = reviewerUser.employee?.teamId
+        if (leadTeamId && ot.employee?.teamId && leadTeamId !== ot.employee.teamId) {
+          const error = new Error('Unauthorized: Team Leads can only review requests for employees in their assigned team.')
+          error.code = 'UNAUTHORIZED_SCOPE'
+          error.status = 403
+          throw error
+        }
+      } else if (reviewerUser?.role === 'EMPLOYEE') {
+        const error = new Error('Unauthorized: Employees do not have review authority for overtime requests.')
+        error.code = 'UNAUTHORIZED_ROLE'
+        error.status = 403
+        throw error
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      // If approved, update overtimeMinutes on linked attendance record if present
+      // ATTENDANCE VERIFICATION BEFORE PAYROLL ELIGIBILITY:
+      // If approved, verify linked attendance record and ensure employee was not ABSENT
       if (decision === 'APPROVED') {
         const attRecord = await tx.attendanceRecord.findUnique({
           where: {
@@ -144,6 +173,12 @@ export const overtimeService = {
         })
 
         if (attRecord) {
+          if (attRecord.status === 'ABSENT') {
+            const error = new Error('Attendance verification failed: Employee attendance status is ABSENT on this date. Overtime cannot be approved for absent days.')
+            error.code = 'ATTENDANCE_VERIFICATION_FAILED'
+            error.status = 400
+            throw error
+          }
           await tx.attendanceRecord.update({
             where: { id: attRecord.id },
             data: {
@@ -213,7 +248,10 @@ export const overtimeService = {
         }
       })
       reviewers.forEach((r) => {
-        const name = r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : (r.username || 'Reviewer')
+        let name = r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : (r.username || 'Reviewer')
+        if (!r.employee && (r.role === 'SUPER_ADMIN' || r.username === 'admin')) {
+          name = 'Super Admin'
+        }
         const roleFormatted = r.role === 'SUPER_ADMIN' ? 'Super Admin'
           : r.role === 'HR_ADMIN' ? 'HR Admin'
           : r.role === 'DEPT_MANAGER' ? 'Department Manager'

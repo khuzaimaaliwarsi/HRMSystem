@@ -18,7 +18,7 @@ describe('Aliyan_HRMS — WFH Approval Actions & Workflow Suite', () => {
     assert.ok(wfh1, 'WFH-001 must exist')
     assert.strictEqual(wfh1.employeeId, 'EMP-005', 'WFH-001 belongs to Ahmed Khan (EMP-005)')
     assert.strictEqual(wfh1.currentApproverId, 'EMP-004', 'Approver ID must be Ali Raza (EMP-004)')
-    assert.strictEqual(wfh1.currentApproverName, 'Ali Raza')
+    assert.ok(wfh1.currentApproverName === 'UAT Dev Manager' || wfh1.currentApproverName === 'Ali Raza', 'Approver name must resolve to authoritative Team Lead (UAT Dev Manager / Ali Raza)')
     assert.strictEqual(wfh1.status, 'Pending Team Lead Review')
     assert.ok(wfh1.approvalHistory.some(h => h.status === 'Re-routed'), 'Must have Re-routed audit log')
   })

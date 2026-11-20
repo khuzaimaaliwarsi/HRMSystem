@@ -266,12 +266,25 @@ export function ManagerAttendancePage({ defaultTab = 'teamRegister', isTeamLead 
           overtimeRequests={safeOvertimeRequests}
           onOpenOvertimeModal={() => setIsOvertimeModalOpen(true)}
           onApproveOvertime={async (id, mins, notes, actor, aId, role) => {
-            await attendanceService.approveOvertimeRequestAsync(id, notes, actor || currentUser.name)
+            await attendanceService.approveOvertimeRequestAsync(
+              id,
+              mins,
+              notes,
+              actor || currentUser?.name,
+              aId || currentUser?.employeeId,
+              role || currentUser?.role
+            )
             await syncAttendanceAndShifts()
             loadData()
           }}
           onRejectOvertime={async (id, notes, actor, aId, role) => {
-            await attendanceService.rejectOvertimeRequestAsync(id, notes, actor || currentUser.name)
+            await attendanceService.rejectOvertimeRequestAsync(
+              id,
+              notes,
+              actor || currentUser?.name,
+              aId || currentUser?.employeeId,
+              role || currentUser?.role
+            )
             await syncAttendanceAndShifts()
             loadData()
           }}

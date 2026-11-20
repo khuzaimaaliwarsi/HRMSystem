@@ -262,12 +262,25 @@ export function HrAdminAttendancePage() {
           overtimeRequests={overtimeRequests}
           onOpenOvertimeModal={() => setIsOvertimeModalOpen(true)}
           onApproveOvertime={async (id, mins, notes, actor, aId, role) => {
-            await attendanceService.approveOvertimeRequestAsync(id, notes, actor || currentUser.name)
+            await attendanceService.approveOvertimeRequestAsync(
+              id,
+              mins,
+              notes,
+              actor || currentUser?.name || 'HR Admin',
+              aId || currentUser?.employeeId || 'EMP-002',
+              role || currentUser?.role || 'hr_admin'
+            )
             await syncAttendanceAndShifts()
             loadData()
           }}
           onRejectOvertime={async (id, notes, actor, aId, role) => {
-            await attendanceService.rejectOvertimeRequestAsync(id, notes, actor || currentUser.name)
+            await attendanceService.rejectOvertimeRequestAsync(
+              id,
+              notes,
+              actor || currentUser?.name || 'HR Admin',
+              aId || currentUser?.employeeId || 'EMP-002',
+              role || currentUser?.role || 'hr_admin'
+            )
             await syncAttendanceAndShifts()
             loadData()
           }}
