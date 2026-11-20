@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
 import Alert from '@/components/common/Alert'
-import { getKarachiToday } from '@/lib/dateUtils'
+import { getKarachiToday, formatTimeTo12Hour } from '@/lib/dateUtils'
 
 export function OvertimeRequestModal({
   isOpen,
@@ -120,6 +120,9 @@ export function OvertimeRequestModal({
               onChange={(e) => handleStartTimeChange(e.target.value)}
               className="w-full p-2 border border-slate-300 rounded"
             />
+            <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+              {formatTimeTo12Hour(startTime)}
+            </span>
           </div>
 
           <div>
@@ -133,6 +136,9 @@ export function OvertimeRequestModal({
               onChange={(e) => handleEndTimeChange(e.target.value)}
               className="w-full p-2 border border-slate-300 rounded"
             />
+            <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+              {formatTimeTo12Hour(endTime)}
+            </span>
           </div>
         </div>
         <div>

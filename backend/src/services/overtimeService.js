@@ -8,12 +8,13 @@ import { prisma } from '../config/database.js'
 import { getKarachiDate, getKarachiTime, timeToMinutes } from '../utils/time.js'
 
 /** Read-only evidence evaluation. Claimed times never count as punched time. */
-function verifyOvertimePunchEvidence(ot, attendance) {
+export function verifyOvertimePunchEvidence(ot, attendance) {
   const denied = (reason) => ({ verified: false, reason, actualCheckIn: null, actualCheckOut: null })
-  if (!attendance || !attendance.firstCheckIn || !attendance.lastCheckOut || Number(attendance.actualWorkMinutes) <= 0) {
+  if (!attendance) return denied('no attendance record found')
+  if (attendance.status === 'ABSENT') return denied('attendance is absent')
+  if (!attendance.firstCheckIn || !attendance.lastCheckOut || Number(attendance.actualWorkMinutes) <= 0) {
     return denied('no completed positive-work attendance session')
   }
-  if (attendance.status === 'ABSENT') return denied('attendance is absent')
   const punches = Array.isArray(attendance.punches) ? attendance.punches : []
   const ins = punches.filter((p) => p.punchType === 'CHECK_IN' && p.punchTime)
   const outs = punches.filter((p) => p.punchType === 'CHECK_OUT' && p.punchTime)

@@ -656,7 +656,7 @@ class ShiftService {
     return list
   }
 
-  assignShiftToEmployee(data, actor = 'HR Administrator') {
+  assignShiftToEmployee(data, actor = 'Super Admin') {
     const { employeeId, shiftId, effectiveFrom, effectiveTo } = data
     if (!employeeId) throw new Error('Employee ID is required for shift assignment.')
     if (!shiftId) throw new Error('Shift ID is required.')
@@ -732,7 +732,7 @@ class ShiftService {
     return newAssignment
   }
 
-  assignShiftToTeam(teamId, shiftId, effectiveFrom, actor = 'HR Administrator') {
+  assignShiftToTeam(teamId, shiftId, effectiveFrom, actor = 'Super Admin') {
     const shift = this.getShiftById(shiftId)
     if (!shift) throw new Error(`Shift '${shiftId}' not found.`)
 
