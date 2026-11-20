@@ -22,6 +22,8 @@ import LoanRequestModal from '../../components/payroll/LoanRequestModal';
 import TaxSlabTable from '../../components/payroll/TaxSlabTable';
 import BankPaymentRegisterTable from '../../components/payroll/BankPaymentRegisterTable';
 import PayslipModal from '../../components/payroll/PayslipModal';
+import EmployeePayrollBreakdownTable from '../../components/payroll/EmployeePayrollBreakdownTable';
+import RefreshDraftConfirmModal from '../../components/payroll/RefreshDraftConfirmModal';
 
 export default function HrAdminPayrollPage() {
   const { currentUser } = useAuth();
@@ -47,6 +49,13 @@ export default function HrAdminPayrollPage() {
   const [selectedRevisionEmployee, setSelectedRevisionEmployee] = useState(null);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+
+  // Refresh Draft Modal state
+  const [refreshRunTarget, setRefreshRunTarget] = useState(null);
+  const [refreshPreviewData, setRefreshPreviewData] = useState(null);
+  const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [breakdownPeriod, setBreakdownPeriod] = useState('2026-11');
 
   const [newRunPeriod, setNewRunPeriod] = useState('2026-11');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -160,6 +169,90 @@ export default function HrAdminPayrollPage() {
     }
   };
 
+  const handleOpenRefreshModal = async (run) => {
+    setActionMessage(null);
+    setRefreshRunTarget(run);
+    try {
+      const res = await apiClient.post(`/payroll/runs/${run.id}/refresh?preview=true`, { preview: true });
+      const preview = res?.data || res?.previewDiff || res;
+      setRefreshPreviewData(preview);
+    } catch (err) {
+      try {
+        const preview = payrollService.getDraftRefreshPreview(run.id);
+        setRefreshPreviewData(preview);
+      } catch (e) {
+        setRefreshPreviewData(null);
+      }
+    }
+    setIsRefreshModalOpen(true);
+  };
+
+  const handleConfirmRefreshDraft = async (runId) => {
+    setIsRefreshing(true);
+    setActionMessage(null);
+    try {
+      const refreshedRun = await apiClient.post(`/payroll/runs/${runId}/refresh`, {
+        reason: 'HR Admin recalculation of draft payroll against canonical records'
+      });
+      await syncPayroll();
+      loadData();
+      setIsRefreshModalOpen(false);
+      setRefreshRunTarget(null);
+      const headcount = refreshedRun?.totalEmployees ?? refreshedRun?.entries?.length ?? 0;
+      setActionMessage({
+        type: 'success',
+        text: `Draft payroll run ${refreshedRun?.runNumber || runId} refreshed successfully (${headcount} employee${headcount === 1 ? '' : 's'}). Run ID and Run Number preserved.`
+      });
+    } catch (err) {
+      try {
+        payrollService.refreshDraftRun(runId, currentUser);
+        loadData();
+        setIsRefreshModalOpen(false);
+        setRefreshRunTarget(null);
+        setActionMessage({
+          type: 'success',
+          text: 'Draft payroll run refreshed successfully.'
+        });
+      } catch (localErr) {
+        setActionMessage({
+          type: 'error',
+          text: err?.message || localErr?.message || 'Failed to refresh payroll draft.'
+        });
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleApproveEmployeeEntry = async (runId, entryId, entry) => {
+    setActionMessage(null);
+    try {
+      await apiClient.patch(`/payroll/runs/${runId}/entries/${entryId}/approve`, {
+        remarks: 'Approved by HR Admin'
+      });
+      await syncPayroll();
+      loadData();
+      setActionMessage({
+        type: 'success',
+        text: `Payroll entry for ${entry?.employeeName || entry?.employeeCode || 'employee'} approved successfully.`
+      });
+    } catch (err) {
+      try {
+        payrollService.approveEmployeeEntry(runId, entryId, currentUser);
+        loadData();
+        setActionMessage({
+          type: 'success',
+          text: `Payroll entry for ${entry?.employeeName || 'employee'} approved successfully.`
+        });
+      } catch (localErr) {
+        setActionMessage({
+          type: 'error',
+          text: err?.message || localErr?.message || 'Failed to approve employee payroll entry.'
+        });
+      }
+    }
+  };
+
   const tabs = [
     { id: 'runs', label: 'Payroll Operations & Runs', icon: 'fa-money-check-dollar' },
     { id: 'structures', label: 'Salary Structures', icon: 'fa-file-invoice' },
@@ -251,11 +344,27 @@ export default function HrAdminPayrollPage() {
       {/* Submodule Screen (One Submodule = One Functional Screen) */}
       <div className="bg-slate-50/50 rounded-xl min-h-[400px]">
         {activeTab === 'runs' && (
-          <PayrollRunTable
-            payrollRuns={payrollRuns}
-            onViewRun={(run) => setSelectedRun(run)}
-            // HR Admin cannot finalize or provide final Super Admin approval
-          />
+          <div className="space-y-6">
+            <PayrollRunTable
+              runs={payrollRuns}
+              payrollRuns={payrollRuns}
+              onViewRun={(run) => setSelectedRun(run)}
+              onRefreshDraft={handleOpenRefreshModal}
+              // HR Admin cannot finalize or provide final Super Admin approval
+            />
+
+            <EmployeePayrollBreakdownTable
+              payrollRuns={payrollRuns}
+              selectedPeriod={breakdownPeriod}
+              onPeriodChange={setBreakdownPeriod}
+              onViewPayslip={(run, entry) => {
+                setSelectedPayslip(payrollService.buildPayslipFromEntry(run, entry));
+              }}
+              onApproveEntry={handleApproveEmployeeEntry}
+              currentUser={currentUser}
+              canApprove={true}
+            />
+          </div>
         )}
 
         {activeTab === 'structures' && (
@@ -370,6 +479,20 @@ export default function HrAdminPayrollPage() {
           payslip={selectedPayslip}
           isOpen={!!selectedPayslip}
           onClose={() => setSelectedPayslip(null)}
+        />
+      )}
+
+      {isRefreshModalOpen && (
+        <RefreshDraftConfirmModal
+          isOpen={isRefreshModalOpen}
+          onClose={() => {
+            setIsRefreshModalOpen(false);
+            setRefreshRunTarget(null);
+          }}
+          onConfirm={handleConfirmRefreshDraft}
+          run={refreshRunTarget}
+          previewData={refreshPreviewData}
+          isLoading={isRefreshing}
         />
       )}
     </div>

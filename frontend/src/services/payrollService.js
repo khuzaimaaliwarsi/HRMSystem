@@ -367,9 +367,19 @@ class PayrollService {
     const run = { ...runs[idx] }
     if (run.status === 'Posted') throw new Error('Payroll run is already posted.')
 
+    if (run.employeeBreakdown?.some((e) => String(e.approvalStatus || '').toUpperCase() === 'REJECTED')) {
+      throw new Error('Cannot approve payroll run: One or more employee entries have been marked as REJECTED.')
+    }
+
     run.status = 'Approved'
     run.approvedBy = approverUser.name || 'Super Admin'
     run.approvedAt = new Date().toISOString().replace('T', ' ').slice(0, 19)
+    run.employeeBreakdown = (run.employeeBreakdown || []).map((e) => ({
+      ...e,
+      approvalStatus: 'APPROVED',
+      approvedBy: approverUser.name || 'Super Admin',
+      approvedAt: run.approvedAt
+    }))
     run.success = true
     run.data = run
 
@@ -377,6 +387,173 @@ class PayrollService {
     this._setItem(STORAGE_KEYS.RUNS, runs)
     this._notify()
     return run
+  }
+
+  /**
+   * Approves an individual employee entry in a draft payroll run
+   */
+  approveEmployeeEntry(runId, entryIdOrEmployeeId, actorUser, remarks = '') {
+    const runs = [...this._getItem(STORAGE_KEYS.RUNS, [])]
+    const idx = runs.findIndex((r) => r.id === runId || r.period === runId || r.runNumber === runId)
+    if (idx === -1) throw new Error(`Payroll run '${runId}' not found.`)
+
+    const run = { ...runs[idx] }
+    if (run.status === 'Posted' || run.status === 'Disbursed') {
+      throw new Error('Cannot modify individual approvals on an already finalized/disbursed run.')
+    }
+
+    const breakdown = [...(run.employeeBreakdown || [])]
+    const entryIdx = breakdown.findIndex(
+      (e) => e.entryId === entryIdOrEmployeeId || e.employeeId === entryIdOrEmployeeId || e.employeeCuid === entryIdOrEmployeeId
+    )
+    if (entryIdx === -1) {
+      throw new Error(`Employee payroll entry '${entryIdOrEmployeeId}' not found in run '${runId}'.`)
+    }
+
+    const entry = breakdown[entryIdx]
+    const actorEmpId = actorUser?.employeeId || actorUser?.employee?.id
+    const actorEmpCode = actorUser?.employeeCode || actorUser?.employee?.employeeCode
+    if (
+      (actorEmpId && (actorEmpId === entry.employeeCuid || actorEmpId === entry.employeeId)) ||
+      (actorEmpCode && (actorEmpCode === entry.employeeId || actorEmpCode === entry.employeeCode))
+    ) {
+      throw new Error('Anti-Self-Approval Prohibited: You cannot approve your own payroll entry.')
+    }
+
+    const approverName = actorUser?.name || 'Super Admin'
+    breakdown[entryIdx] = {
+      ...entry,
+      approvalStatus: 'APPROVED',
+      approvedBy: approverName,
+      approvedAt: new Date().toISOString(),
+      remarks: remarks || null
+    }
+
+    run.employeeBreakdown = breakdown
+    runs[idx] = run
+    this._setItem(STORAGE_KEYS.RUNS, runs)
+    this._notify()
+    return {
+      success: true,
+      entryId: entry.entryId,
+      approvalStatus: 'APPROVED',
+      approvedBy: approverName,
+      entry: breakdown[entryIdx]
+    }
+  }
+
+  /**
+   * Rejects an individual employee entry in a draft payroll run
+   */
+  rejectEmployeeEntry(runId, entryIdOrEmployeeId, reason, actorUser) {
+    if (!reason || !reason.trim()) {
+      throw new Error('A valid rejection reason is required.')
+    }
+    const runs = [...this._getItem(STORAGE_KEYS.RUNS, [])]
+    const idx = runs.findIndex((r) => r.id === runId || r.period === runId || r.runNumber === runId)
+    if (idx === -1) throw new Error(`Payroll run '${runId}' not found.`)
+
+    const run = { ...runs[idx] }
+    if (run.status === 'Posted' || run.status === 'Disbursed') {
+      throw new Error('Cannot modify individual approvals on an already finalized/disbursed run.')
+    }
+
+    const breakdown = [...(run.employeeBreakdown || [])]
+    const entryIdx = breakdown.findIndex(
+      (e) => e.entryId === entryIdOrEmployeeId || e.employeeId === entryIdOrEmployeeId || e.employeeCuid === entryIdOrEmployeeId
+    )
+    if (entryIdx === -1) {
+      throw new Error(`Employee payroll entry '${entryIdOrEmployeeId}' not found in run '${runId}'.`)
+    }
+
+    const entry = breakdown[entryIdx]
+    const actorEmpId = actorUser?.employeeId || actorUser?.employee?.id
+    const actorEmpCode = actorUser?.employeeCode || actorUser?.employee?.employeeCode
+    if (
+      (actorEmpId && (actorEmpId === entry.employeeCuid || actorEmpId === entry.employeeId)) ||
+      (actorEmpCode && (actorEmpCode === entry.employeeId || actorEmpCode === entry.employeeCode))
+    ) {
+      throw new Error('Anti-Self-Approval Prohibited: You cannot reject your own payroll entry.')
+    }
+
+    const rejecterName = actorUser?.name || 'Super Admin'
+    breakdown[entryIdx] = {
+      ...entry,
+      approvalStatus: 'REJECTED',
+      rejectionReason: reason.trim(),
+      rejectedBy: rejecterName,
+      rejectedAt: new Date().toISOString()
+    }
+
+    run.employeeBreakdown = breakdown
+    runs[idx] = run
+    this._setItem(STORAGE_KEYS.RUNS, runs)
+    this._notify()
+    return {
+      success: true,
+      entryId: entry.entryId,
+      approvalStatus: 'REJECTED',
+      rejectionReason: reason.trim(),
+      entry: breakdown[entryIdx]
+    }
+  }
+
+  /**
+   * Refreshes a DRAFT payroll run, preserving exact Run ID and Run Number
+   */
+  refreshDraftRun(runId, actorUser, options = {}) {
+    const runs = [...this._getItem(STORAGE_KEYS.RUNS, [])]
+    const idx = runs.findIndex((r) => r.id === runId || r.period === runId || r.runNumber === runId)
+    if (idx === -1) throw new Error(`Payroll run '${runId}' not found.`)
+
+    const run = runs[idx]
+    const statusUpper = String(run.status || '').toUpperCase()
+    if (['APPROVED', 'POSTED', 'DISBURSED', 'VOID'].includes(statusUpper)) {
+      throw new Error(`Cannot refresh payroll run '${run.runNumber || run.id}'. Status is '${run.status}'. Only DRAFT runs can be recalculated.`)
+    }
+
+    const originalId = run.id
+    const originalRunNumber = run.runNumber || run.id
+
+    const refreshed = this._enrichRunWithEmployees({
+      ...run,
+      id: originalId,
+      runNumber: originalRunNumber
+    })
+
+    runs[idx] = refreshed
+    this._setItem(STORAGE_KEYS.RUNS, runs)
+    this._notify()
+    return refreshed
+  }
+
+  /**
+   * Preview diff for draft refresh
+   */
+  getDraftRefreshPreview(runId) {
+    const runs = this._getItem(STORAGE_KEYS.RUNS, [])
+    const run = runs.find((r) => r.id === runId || r.period === runId || r.runNumber === runId)
+    if (!run) throw new Error(`Payroll run '${runId}' not found.`)
+
+    const currentHeadcount = (run.employeeBreakdown || []).length
+    const currentGross = Number(run.grossPayroll || run.totalGross || 0)
+    const currentNet = Number(run.netPayable || run.totalNet || 0)
+    const approvedEntries = (run.employeeBreakdown || []).filter((e) => String(e.approvalStatus || '').toUpperCase() === 'APPROVED')
+
+    return {
+      preview: true,
+      runId: run.id,
+      runNumber: run.runNumber || run.id,
+      periodCode: run.period,
+      currentTotals: { gross: currentGross, net: currentNet, headcount: currentHeadcount },
+      newTotals: { gross: currentGross, net: currentNet, headcount: currentHeadcount },
+      diff: { gross: 0, net: 0, headcount: 0 },
+      hasIndividualApprovals: approvedEntries.length > 0,
+      approvedEntriesCount: approvedEntries.length,
+      added: [],
+      removed: [],
+      updated: []
+    }
   }
 
   /**

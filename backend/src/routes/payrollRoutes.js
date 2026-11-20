@@ -351,6 +351,51 @@ router.patch('/runs/:id/disburse', requireRoles('SUPER_ADMIN'), async (req, res,
   }
 })
 
+/**
+ * POST /api/v1/payroll/runs/:id/refresh
+ * Recalculates DRAFT payroll run against canonical PostgreSQL records.
+ * Supports preview diff (?preview=true or body.preview=true) without mutations.
+ * Preserves the exact same Payroll Run ID and Run Number.
+ */
+router.post('/runs/:id/refresh', requireRoles('SUPER_ADMIN', 'HR_ADMIN'), async (req, res, next) => {
+  try {
+    const isPreview = req.query.preview === 'true' || req.body?.preview === true
+    const refreshed = await payrollService.refreshDraftPayrollRun(req.params.id, req.user, {
+      preview: isPreview,
+      reason: req.body?.reason
+    })
+    return sendSuccess(res, refreshed, { message: isPreview ? 'Refresh draft preview calculated' : 'Draft payroll run refreshed successfully' }, 200)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * PATCH /api/v1/payroll/runs/:runId/entries/:entryId/approve
+ * Approves an individual employee payroll entry.
+ */
+router.patch('/runs/:runId/entries/:entryId/approve', requireRoles('SUPER_ADMIN', 'HR_ADMIN'), async (req, res, next) => {
+  try {
+    const result = await payrollService.approvePayrollEntry(req.params.runId, req.params.entryId, req.user, req.body?.remarks)
+    return sendSuccess(res, result, { message: result.message }, 200)
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * PATCH /api/v1/payroll/runs/:runId/entries/:entryId/reject
+ * Rejects an individual employee payroll entry.
+ */
+router.patch('/runs/:runId/entries/:entryId/reject', requireRoles('SUPER_ADMIN', 'HR_ADMIN'), async (req, res, next) => {
+  try {
+    const result = await payrollService.rejectPayrollEntry(req.params.runId, req.params.entryId, req.body?.reason, req.user)
+    return sendSuccess(res, result, { message: result.message }, 200)
+  } catch (err) {
+    next(err)
+  }
+})
+
 // ==============================================================================
 // 4. EMPLOYEE LOANS & SALARY ADVANCES
 // ==============================================================================

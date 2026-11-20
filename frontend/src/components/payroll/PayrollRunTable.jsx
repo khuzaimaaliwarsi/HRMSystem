@@ -10,6 +10,7 @@ export function PayrollRunTable({
   onApproveRun,
   onFinalizeRun,
   onReconcileRun,
+  onRefreshDraft,
   onGenerateDraft,
   canGenerate = false
 }) {
@@ -96,6 +97,19 @@ export function PayrollRunTable({
                 </td>
                 <td className="px-4 py-3 text-right font-sans">
                   <div className="flex items-center justify-end gap-1.5">
+                    {onRefreshDraft && ['DRAFT', 'PENDING SUPERVISION', 'PENDING SUPER ADMIN REVIEW', 'PENDING_APPROVAL'].includes(String(run.status || '').toUpperCase()) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRefreshDraft(run)}
+                        className="text-[11px] text-blue-700 border-blue-300 hover:bg-blue-50 font-bold cursor-pointer"
+                        title="Recalculate draft against canonical records"
+                      >
+                        <AppIcon name="arrowPath" className="w-3 h-3 mr-1" />
+                        <span>Refresh Draft</span>
+                      </Button>
+                    )}
                     {onReconcileRun && (run.isReconciled === false || run.hasInactiveEmployees === true) && ['DRAFT', 'PENDING_APPROVAL'].includes(String(run.status || '').toUpperCase()) && (
                       <Button
                         type="button"

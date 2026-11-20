@@ -562,10 +562,68 @@ export const payrollService = {
       }
     });
 
-    return runs.map((run) => ({
-      ...run,
-      ...assessPayrollRunReconciliation(run)
-    }));
+    const allEntryIds = runs.flatMap((r) => (r.entries || []).map((e) => e.id));
+    let approvalLogs = [];
+    if (allEntryIds.length > 0) {
+      approvalLogs = await prisma.auditLog.findMany({
+        where: {
+          entityName: 'PayrollEntry',
+          entityId: { in: allEntryIds },
+          actionType: { in: ['APPROVE', 'REJECT'] }
+        },
+        orderBy: { createdAt: 'desc' }
+      }).catch(() => []);
+    }
+
+    const logMap = new Map();
+    for (const log of approvalLogs) {
+      if (!logMap.has(log.entityId)) {
+        logMap.set(log.entityId, log);
+      }
+    }
+
+    return runs.map((run) => {
+      const isRunApproved = ['APPROVED', 'DISBURSED', 'POSTED'].includes(String(run.status || '').toUpperCase());
+      const entriesWithApproval = (run.entries || []).map((entry) => {
+        const log = logMap.get(entry.id);
+        let approvalStatus = 'PENDING';
+        let approvedById = null;
+        let approvedByName = null;
+        let approvedAt = null;
+        let rejectionReason = null;
+
+        if (log) {
+          if (log.actionType === 'APPROVE') {
+            approvalStatus = 'APPROVED';
+            approvedById = log.actorUserId;
+            approvedByName = log.recordSnapshotAfter?.approvedByName || log.actorRole || 'Super Admin';
+            approvedAt = log.recordSnapshotAfter?.approvedAt || log.createdAt;
+          } else if (log.actionType === 'REJECT') {
+            approvalStatus = 'REJECTED';
+            rejectionReason = log.recordSnapshotAfter?.rejectionReason || log.reasonOrNotes || 'Rejected';
+          }
+        } else if (isRunApproved) {
+          approvalStatus = 'APPROVED';
+          approvedByName = 'Super Admin';
+          approvedAt = run.approvedAt;
+        }
+
+        return {
+          ...entry,
+          approvalStatus,
+          approvedById,
+          approvedByName,
+          approvedAt,
+          rejectionReason
+        };
+      });
+
+      const runWithEntries = { ...run, entries: entriesWithApproval };
+      return {
+        ...runWithEntries,
+        ...assessPayrollRunReconciliation(runWithEntries)
+      };
+    });
   },
 
 
@@ -613,6 +671,28 @@ export const payrollService = {
     const runTaxSnapshots = org?.settingsJson?.runTaxSnapshots || {}
     const snapshot = runTaxSnapshots[run.id] || null
 
+    const entryIds = (run.entries || []).map((e) => e.id);
+    let approvalLogs = [];
+    if (entryIds.length > 0) {
+      approvalLogs = await prisma.auditLog.findMany({
+        where: {
+          entityName: 'PayrollEntry',
+          entityId: { in: entryIds },
+          actionType: { in: ['APPROVE', 'REJECT'] }
+        },
+        orderBy: { createdAt: 'desc' }
+      }).catch(() => []);
+    }
+
+    const logMap = new Map();
+    for (const log of approvalLogs) {
+      if (!logMap.has(log.entityId)) {
+        logMap.set(log.entityId, log);
+      }
+    }
+
+    const isRunApproved = ['APPROVED', 'DISBURSED', 'POSTED'].includes(String(run.status || '').toUpperCase());
+
     let totalStatutoryTax = 0
     let totalTaxWithheld = 0
 
@@ -629,8 +709,36 @@ export const payrollService = {
       }
       totalStatutoryTax += statutory
 
+      const log = logMap.get(entry.id);
+      let approvalStatus = 'PENDING';
+      let approvedById = null;
+      let approvedByName = null;
+      let approvedAt = null;
+      let rejectionReason = null;
+
+      if (log) {
+        if (log.actionType === 'APPROVE') {
+          approvalStatus = 'APPROVED';
+          approvedById = log.actorUserId;
+          approvedByName = log.recordSnapshotAfter?.approvedByName || log.actorRole || 'Super Admin';
+          approvedAt = log.recordSnapshotAfter?.approvedAt || log.createdAt;
+        } else if (log.actionType === 'REJECT') {
+          approvalStatus = 'REJECTED';
+          rejectionReason = log.recordSnapshotAfter?.rejectionReason || log.reasonOrNotes || 'Rejected';
+        }
+      } else if (isRunApproved) {
+        approvalStatus = 'APPROVED';
+        approvedByName = 'Super Admin';
+        approvedAt = run.approvedAt;
+      }
+
       return {
         ...entry,
+        approvalStatus,
+        approvedById,
+        approvedByName,
+        approvedAt,
+        rejectionReason,
         statutoryTaxLiability: statutory,
         statutoryVariance: statutory - withheld
       }
@@ -648,6 +756,246 @@ export const payrollService = {
         taxSnapshot: snapshot
       },
       ...reconciliation
+    }
+  },
+
+  /**
+   * Internal reusable calculator for canonical period payroll entries:
+   * 1. Fixed 31-day divisor for daily basic rate.
+   * 2. Exactly 2 paid leave days per calendar month; excess is unpaid (PKR 500 penalty/day).
+   * 3. 31-day base hourly rate for approved overtime based on shift hours * 1.5.
+   * 4. FBR Section 149 progressive salary tax.
+   * 5. Active loan installment deduction recovery.
+   */
+  async calculateCanonicalPeriodEntries(period, options = {}) {
+    const startDate = new Date(period.startDate)
+    const endDate = new Date(period.endDate)
+    const periodStartStr = toUtcCalendarDate(startDate)
+    const periodEndStr = toUtcCalendarDate(endDate)
+
+    // Fetch all active employees and resolve period-eligible salary structures
+    const employees = await prisma.employee.findMany({
+      where: { employmentStatus: 'ACTIVE' },
+      include: {
+        department: true,
+        designation: true,
+        salaryStructures: {
+          orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }]
+        },
+        salaryRevisions: { where: { status: 'APPROVED' } },
+        allowanceAllocations: { where: { isActive: true }, include: { allowance: true } }
+      },
+      orderBy: { employeeCode: 'asc' }
+    })
+
+    const eligibleEmployees = employees.filter((e) =>
+      isEmployeeEligibleForPeriod(e, periodStartStr, periodEndStr)
+    )
+
+    if (eligibleEmployees.length === 0) {
+      const error = new Error(`No eligible active employees found to generate payroll for '${period.periodCode}'.`)
+      error.code = 'NO_ACTIVE_EMPLOYEES'
+      error.status = 400
+      throw error
+    }
+
+    // Filter eligible employees who have an effective salary structure for the period
+    const employeesWithSalary = eligibleEmployees
+      .map((e) => {
+        const resolvedSalary = salaryForPayrollPeriod(e, periodStartStr, periodEndStr)
+        return resolvedSalary ? { ...e, payrollResolvedSalary: resolvedSalary } : null
+      })
+      .filter(Boolean)
+
+    if (employeesWithSalary.length === 0) {
+      const missingCodes = eligibleEmployees.map((e) => e.employeeCode).join(', ')
+      const error = new Error(`Cannot generate payroll: All eligible active employees lack an effective salary structure for '${period.periodCode}': ${missingCodes}. Please assign salary structures before proceeding.`)
+      error.code = 'MISSING_SALARY_STRUCTURE'
+      error.status = 400
+      throw error
+    }
+    const actualCalendarDays = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
+
+    // Pre-fetch approved leaves, approved overtimes, and active loans within the period
+    const [approvedLeaves, approvedOvertimes, activeLoans] = await Promise.all([
+      prisma.leaveRequest.findMany({
+        where: {
+          status: 'APPROVED',
+          startDate: { lte: endDate },
+          endDate: { gte: startDate }
+        },
+        include: { leaveType: true }
+      }),
+      prisma.overtimeRequest.findMany({
+        where: {
+          status: 'APPROVED',
+          overtimeDate: { gte: startDate, lte: endDate }
+        }
+      }),
+      prisma.employeeLoan.findMany({
+        where: {
+          status: 'DISBURSED',
+          remainingBalance: { gt: 0 }
+        }
+      })
+    ])
+
+    // Group leaves by employee, accurately apportioning days into THIS calendar month
+    const leavesByEmp = new Map()
+    for (const req of approvedLeaves) {
+      const reqStart = new Date(Math.max(new Date(req.startDate), startDate))
+      const reqEnd = new Date(Math.min(new Date(req.endDate), endDate))
+      let daysInMonth = 0
+      if (reqEnd >= reqStart) {
+        daysInMonth = req.isHalfDay ? 0.5 : Math.ceil((reqEnd - reqStart) / (1000 * 60 * 60 * 24)) + 1
+      }
+
+      if (daysInMonth > 0) {
+        const empList = leavesByEmp.get(req.employeeId) || []
+        empList.push({
+          ...req,
+          daysInMonth,
+          isPaidType: req.leaveType?.isPaid !== false
+        })
+        leavesByEmp.set(req.employeeId, empList)
+      }
+    }
+
+    // Overtime grouped by employee
+    const overtimeByEmp = new Map()
+    for (const ot of approvedOvertimes) {
+      const current = overtimeByEmp.get(ot.employeeId) || 0
+      overtimeByEmp.set(ot.employeeId, current + ot.durationMinutes)
+    }
+
+    // Loans grouped by employee
+    const loansByEmp = new Map()
+    for (const loan of activeLoans) {
+      loansByEmp.set(loan.employeeId, loan)
+    }
+
+    const taxConfig = await payrollTaxService.getTaxConfig()
+
+    let totalGross = 0
+    let totalDeductions = 0
+    let totalNet = 0
+    const calculatedEntries = []
+
+    const overtimeMultiplier = options.overtimeMultiplier || 1.5
+
+    for (const emp of employeesWithSalary) {
+      const structure = emp.payrollResolvedSalary || emp.salaryStructures[0]
+      const baseSalary = Number(structure.baseSalary)
+      const houseRent = Number(structure.houseRentAllowance) || 0
+      const medical = Number(structure.medicalAllowance) || 0
+      const conveyance = Number(structure.conveyanceAllowance) || 0
+      const special = Number(structure.specialAllowance) || 0
+
+      // Fixed 31-day divisor
+      const dailyBasicRate = baseSalary / 31
+
+      // 2 allowed leaves (PKR 0) + PKR 500 / extra leave
+      const empLeaves = leavesByEmp.get(emp.id) || []
+      let eligiblePaidLeaveDaysTaken = 0
+      let explicitlyUnpaidLeaveDays = 0
+
+      for (const l of empLeaves) {
+        if (!l.isPaidType) {
+          explicitlyUnpaidLeaveDays += l.daysInMonth
+        } else {
+          eligiblePaidLeaveDaysTaken += l.daysInMonth
+        }
+      }
+
+      const extraLeaveDays = Math.max(0, eligiblePaidLeaveDaysTaken - 2)
+      const penaltyPerDay = options.extraLeavePenaltyPerDay !== undefined
+        ? Number(options.extraLeavePenaltyPerDay)
+        : 500
+      const extraLeaveDeduction = extraLeaveDays * penaltyPerDay
+      const unpaidAbsenceDeduction = Math.round(dailyBasicRate * explicitlyUnpaidLeaveDays)
+      const otherDeductions = extraLeaveDeduction
+
+      // 31-day hourly overtime
+      let standardPaidHoursPerDay = 8.0
+      try {
+        const { shift } = await shiftService.resolveEmployeeShift(emp.id, periodStartStr)
+        if (shift?.fullDayTargetMinutes) {
+          standardPaidHoursPerDay = shift.fullDayTargetMinutes / 60
+        }
+      } catch {
+        standardPaidHoursPerDay = 8.0
+      }
+
+      const baseHourlyRate = dailyBasicRate / standardPaidHoursPerDay
+      const otMinutes = overtimeByEmp.get(emp.id) || 0
+      const otHours = Math.round((otMinutes / 60) * 10) / 10
+      const overtimeAmount = Math.round(otHours * baseHourlyRate * overtimeMultiplier)
+
+      const grossEarnings = baseSalary + houseRent + medical + conveyance + special + overtimeAmount
+
+      const taxCalc = await payrollTaxService.calculateEmployeeTax(emp, grossEarnings, startDate, taxConfig)
+      const taxDeduction = taxCalc.taxDeduction
+
+      let loanDeduction = 0
+      const activeLoan = loansByEmp.get(emp.id)
+      if (activeLoan) {
+        loanDeduction = Math.min(Number(activeLoan.monthlyInstallment), Number(activeLoan.remainingBalance))
+      }
+
+      const totalEmpDeductions = taxDeduction + unpaidAbsenceDeduction + loanDeduction + otherDeductions
+      const netSalary = Math.max(0, grossEarnings - totalEmpDeductions)
+      const unrecoveredLiability = totalEmpDeductions > grossEarnings ? totalEmpDeductions - grossEarnings : 0
+
+      totalGross += grossEarnings
+      totalDeductions += totalEmpDeductions
+      totalNet += netSalary
+
+      const totalUnpaidLeaveDays = explicitlyUnpaidLeaveDays + extraLeaveDays
+      const payableDays = Math.max(0, actualCalendarDays - explicitlyUnpaidLeaveDays)
+
+      calculatedEntries.push({
+        employeeId: emp.id,
+        calendarDays: actualCalendarDays,
+        payableDays: new Prisma.Decimal(payableDays.toFixed(1)),
+        absentDays: new Prisma.Decimal(totalUnpaidLeaveDays.toFixed(1)),
+        unpaidLeaveDays: new Prisma.Decimal(totalUnpaidLeaveDays.toFixed(1)),
+        basicSalary: new Prisma.Decimal(baseSalary.toFixed(2)),
+        houseRentAllowance: new Prisma.Decimal(houseRent.toFixed(2)),
+        medicalAllowance: new Prisma.Decimal(medical.toFixed(2)),
+        conveyanceAllowance: new Prisma.Decimal(conveyance.toFixed(2)),
+        specialAllowance: new Prisma.Decimal(special.toFixed(2)),
+        overtimeHours: new Prisma.Decimal(otHours.toFixed(1)),
+        overtimeAmount: new Prisma.Decimal(overtimeAmount.toFixed(2)),
+        bonusAmount: new Prisma.Decimal('0.00'),
+        commissionAmount: new Prisma.Decimal('0.00'),
+        grossEarnings: new Prisma.Decimal(grossEarnings.toFixed(2)),
+        taxDeduction: new Prisma.Decimal(taxDeduction.toFixed(2)),
+        eobiDeduction: new Prisma.Decimal('0.00'),
+        providentFundDeduction: new Prisma.Decimal('0.00'),
+        loanDeduction: new Prisma.Decimal(loanDeduction.toFixed(2)),
+        unpaidAbsenceDeduction: new Prisma.Decimal(unpaidAbsenceDeduction.toFixed(2)),
+        otherDeductions: new Prisma.Decimal(otherDeductions.toFixed(2)),
+        totalDeductions: new Prisma.Decimal(totalEmpDeductions.toFixed(2)),
+        netSalary: new Prisma.Decimal(netSalary.toFixed(2)),
+        unrecoveredLiability: new Prisma.Decimal(unrecoveredLiability.toFixed(2)),
+        currency: 'PKR',
+        paymentMethod: 'BANK_TRANSFER',
+        bankName: emp.bankName || null,
+        bankAccountTitle: emp.bankAccountTitle || null,
+        bankAccountNumber: emp.bankAccountNumber || null,
+        bankIban: emp.bankIban || null,
+        paymentStatus: 'UNPAID',
+        transactionReference: null
+      })
+    }
+
+    return {
+      actualCalendarDays,
+      employeesWithSalary,
+      calculatedEntries,
+      totalGross: Math.round(totalGross * 100) / 100,
+      totalDeductions: Math.round(totalDeductions * 100) / 100,
+      totalNet: Math.round(totalNet * 100) / 100
     }
   },
 
@@ -745,263 +1093,16 @@ export const payrollService = {
       throw error
     }
 
-    const startDate = period.startDate
-    const endDate = period.endDate
-    const periodStartStr = toUtcCalendarDate(startDate)
-    const periodEndStr = toUtcCalendarDate(endDate)
-
-    // Fetch all active employees and resolve period-eligible salary structures
-    const employees = await prisma.employee.findMany({
-      where: { employmentStatus: 'ACTIVE' },
-      include: {
-        department: true,
-        designation: true,
-        salaryStructures: {
-          orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }]
-        },
-        salaryRevisions: { where: { status: 'APPROVED' } },
-        allowanceAllocations: { where: { isActive: true }, include: { allowance: true } }
-      },
-      orderBy: { employeeCode: 'asc' }
-    })
-
-    const eligibleEmployees = employees.filter((e) =>
-      isEmployeeEligibleForPeriod(e, periodStartStr, periodEndStr)
-    )
-
-    if (eligibleEmployees.length === 0) {
-      const error = new Error(`No eligible active employees found to generate payroll for '${period.periodCode}'.`)
-      error.code = 'NO_ACTIVE_EMPLOYEES'
-      error.status = 400
-      throw error
-    }
-
-    // Filter eligible employees who have an effective salary structure for the period
-    const employeesWithSalary = eligibleEmployees
-      .map((e) => {
-        const resolvedSalary = salaryForPayrollPeriod(e, periodStartStr, periodEndStr)
-        return resolvedSalary ? { ...e, payrollResolvedSalary: resolvedSalary } : null
-      })
-      .filter(Boolean)
-
-    if (employeesWithSalary.length === 0) {
-      const missingCodes = eligibleEmployees.map((e) => e.employeeCode).join(', ')
-      const error = new Error(`Cannot generate payroll: All eligible active employees lack an effective salary structure for '${period.periodCode}': ${missingCodes}. Please assign salary structures before proceeding.`)
-      error.code = 'MISSING_SALARY_STRUCTURE'
-      error.status = 400
-      throw error
-    }
-    const actualCalendarDays = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
-
-    // Pre-fetch approved leaves, approved overtimes, and active loans within the period
-    const [approvedLeaves, approvedOvertimes, activeLoans] = await Promise.all([
-      prisma.leaveRequest.findMany({
-        where: {
-          status: 'APPROVED',
-          startDate: { lte: endDate },
-          endDate: { gte: startDate }
-        },
-        include: { leaveType: true }
-      }),
-      prisma.overtimeRequest.findMany({
-        where: {
-          status: 'APPROVED',
-          overtimeDate: { gte: startDate, lte: endDate }
-        }
-      }),
-      prisma.employeeLoan.findMany({
-        where: {
-          status: 'DISBURSED',
-          remainingBalance: { gt: 0 }
-        }
-      })
-    ])
-
-    // =========================================================================
-    // MONTHLY LEAVE POLICY ENGINE (TWO PAID DAYS ALLOWED PER CALENDAR MONTH)
-    // =========================================================================
-    // Group leaves by employee, accurately apportioning days into THIS calendar month
-    const leavesByEmp = new Map()
-    for (const req of approvedLeaves) {
-      const reqStart = new Date(Math.max(new Date(req.startDate), startDate))
-      const reqEnd = new Date(Math.min(new Date(req.endDate), endDate))
-      let daysInMonth = 0
-      if (reqEnd >= reqStart) {
-        daysInMonth = req.isHalfDay ? 0.5 : Math.ceil((reqEnd - reqStart) / (1000 * 60 * 60 * 24)) + 1
-      }
-
-      if (daysInMonth > 0) {
-        const empList = leavesByEmp.get(req.employeeId) || []
-        empList.push({
-          ...req,
-          daysInMonth,
-          isPaidType: req.leaveType?.isPaid !== false
-        })
-        leavesByEmp.set(req.employeeId, empList)
-      }
-    }
-
-    // Overtime grouped by employee
-    const overtimeByEmp = new Map()
-    for (const ot of approvedOvertimes) {
-      const current = overtimeByEmp.get(ot.employeeId) || 0
-      overtimeByEmp.set(ot.employeeId, current + ot.durationMinutes)
-    }
-
-    // Loans grouped by employee
-    const loansByEmp = new Map()
-    for (const loan of activeLoans) {
-      loansByEmp.set(loan.employeeId, loan)
-    }
+    const {
+      actualCalendarDays,
+      employeesWithSalary,
+      calculatedEntries,
+      totalGross,
+      totalDeductions,
+      totalNet
+    } = await this.calculateCanonicalPeriodEntries(period, options)
 
     const taxConfig = await payrollTaxService.getTaxConfig()
-
-    let totalGross = 0
-    let totalDeductions = 0
-    let totalNet = 0
-    const calculatedEntries = []
-
-    // Configure rate parameters
-    const overtimeMultiplier = options.overtimeMultiplier || 1.5
-    const extraLeaveFlatPenalty = options.extraLeavePenaltyPerDay || 0 // e.g. 500 PKR if configured
-
-    for (const emp of employeesWithSalary) {
-      const structure = emp.payrollResolvedSalary || emp.salaryStructures[0]
-      const baseSalary = Number(structure.baseSalary)
-      const houseRent = Number(structure.houseRentAllowance) || 0
-      const medical = Number(structure.medicalAllowance) || 0
-      const conveyance = Number(structure.conveyanceAllowance) || 0
-      const special = Number(structure.specialAllowance) || 0
-
-      // -----------------------------------------------------------------------
-      // 1. MANDATORY OWNER FORMULA: FIXED 31-DAY DIVISOR
-      // -----------------------------------------------------------------------
-      // Rate divisor is ALWAYS 31 for every month of the year
-      const dailyBasicRate = baseSalary / 31
-
-      // -----------------------------------------------------------------------
-      // 2. OWNER LEAVE POLICY: 2 ALLOWED LEAVES (PKR 0) + PKR 500 / EXTRA LEAVE
-      // -----------------------------------------------------------------------
-      const empLeaves = leavesByEmp.get(emp.id) || []
-      let eligiblePaidLeaveDaysTaken = 0
-      let explicitlyUnpaidLeaveDays = 0
-
-      for (const l of empLeaves) {
-        if (!l.isPaidType) {
-          explicitlyUnpaidLeaveDays += l.daysInMonth
-        } else {
-          eligiblePaidLeaveDaysTaken += l.daysInMonth
-        }
-      }
-
-      // First 2 company-allowed leaves incur ZERO salary deduction
-      const companyAllowedLeaves = Math.min(2, eligiblePaidLeaveDaysTaken)
-      // Starting from 3rd leave day, deduct exactly PKR 500 per additional day
-      const extraLeaveDays = Math.max(0, eligiblePaidLeaveDaysTaken - 2)
-      const penaltyPerDay = options.extraLeavePenaltyPerDay !== undefined
-        ? Number(options.extraLeavePenaltyPerDay)
-        : 500
-      const extraLeaveDeduction = extraLeaveDays * penaltyPerDay
-
-      // Explicitly unauthorized absence or unpaid special leave deducts at daily basic rate
-      const unpaidAbsenceDeduction = Math.round(dailyBasicRate * explicitlyUnpaidLeaveDays)
-
-      // Fixed extra-leave deduction placed in dedicated line / otherDeductions
-      const otherDeductions = extraLeaveDeduction
-
-      // -----------------------------------------------------------------------
-      // 3. 31-DAY HOURLY OVERTIME CALCULATION
-      // -----------------------------------------------------------------------
-      // Look up employee's resolved shift to get standard paid hours per day
-      let standardPaidHoursPerDay = 8.0
-      try {
-        const { shift } = await shiftService.resolveEmployeeShift(emp.id, period.startDate.toISOString().slice(0, 10))
-        if (shift?.fullDayTargetMinutes) {
-          standardPaidHoursPerDay = shift.fullDayTargetMinutes / 60
-        }
-      } catch {
-        standardPaidHoursPerDay = 8.0
-      }
-
-      // Base Hourly Rate = (Monthly Basic Salary / 31) / Approved Standard Paid Hours Per Day
-      const baseHourlyRate = dailyBasicRate / standardPaidHoursPerDay
-
-      const otMinutes = overtimeByEmp.get(emp.id) || 0
-      const otHours = Math.round((otMinutes / 60) * 10) / 10
-      const overtimeAmount = Math.round(otHours * baseHourlyRate * overtimeMultiplier)
-
-      // -----------------------------------------------------------------------
-      // 4. GROSS SALARY
-      // -----------------------------------------------------------------------
-      // Full monthly basic salary is preserved for fully eligible employees
-      const grossEarnings = baseSalary + houseRent + medical + conveyance + special + overtimeAmount
-
-      // -----------------------------------------------------------------------
-      // 5. TAX WITHHOLDING (MANUAL CONFIGURATION OR FBR STATUTORY WITH OVERRIDES)
-      // -----------------------------------------------------------------------
-      const taxCalc = await payrollTaxService.calculateEmployeeTax(emp, grossEarnings, period.startDate, taxConfig)
-      const taxDeduction = taxCalc.taxDeduction
-
-      // -----------------------------------------------------------------------
-      // 6. LOAN DEDUCTIONS
-      // -----------------------------------------------------------------------
-      let loanDeduction = 0
-      const activeLoan = loansByEmp.get(emp.id)
-      if (activeLoan) {
-        loanDeduction = Math.min(Number(activeLoan.monthlyInstallment), Number(activeLoan.remainingBalance))
-      }
-
-      // -----------------------------------------------------------------------
-      // 7. TOTAL DEDUCTIONS & NET SALARY (WITH STRUCTURED LIABILITY ACCOUNTING)
-      // -----------------------------------------------------------------------
-      const totalEmpDeductions = taxDeduction + unpaidAbsenceDeduction + loanDeduction + otherDeductions
-
-      // Preserve unrecovered liability if deductions exceed gross
-      const netSalary = Math.max(0, grossEarnings - totalEmpDeductions)
-      const unrecoveredLiability = totalEmpDeductions > grossEarnings ? totalEmpDeductions - grossEarnings : 0
-
-      totalGross += grossEarnings
-      totalDeductions += totalEmpDeductions
-      totalNet += netSalary
-
-      const totalUnpaidLeaveDays = explicitlyUnpaidLeaveDays + extraLeaveDays
-      const payableDays = Math.max(0, actualCalendarDays - explicitlyUnpaidLeaveDays)
-
-      calculatedEntries.push({
-        employeeId: emp.id,
-        calendarDays: actualCalendarDays,
-        payableDays: new Prisma.Decimal(payableDays.toFixed(1)),
-        absentDays: new Prisma.Decimal(totalUnpaidLeaveDays.toFixed(1)),
-        unpaidLeaveDays: new Prisma.Decimal(totalUnpaidLeaveDays.toFixed(1)),
-        basicSalary: new Prisma.Decimal(baseSalary.toFixed(2)),
-        houseRentAllowance: new Prisma.Decimal(houseRent.toFixed(2)),
-        medicalAllowance: new Prisma.Decimal(medical.toFixed(2)),
-        conveyanceAllowance: new Prisma.Decimal(conveyance.toFixed(2)),
-        specialAllowance: new Prisma.Decimal(special.toFixed(2)),
-        overtimeHours: new Prisma.Decimal(otHours.toFixed(1)),
-        overtimeAmount: new Prisma.Decimal(overtimeAmount.toFixed(2)),
-        bonusAmount: new Prisma.Decimal('0.00'),
-        commissionAmount: new Prisma.Decimal('0.00'),
-        grossEarnings: new Prisma.Decimal(grossEarnings.toFixed(2)),
-        taxDeduction: new Prisma.Decimal(taxDeduction.toFixed(2)),
-        eobiDeduction: new Prisma.Decimal('0.00'),
-        providentFundDeduction: new Prisma.Decimal('0.00'),
-        loanDeduction: new Prisma.Decimal(loanDeduction.toFixed(2)),
-        unpaidAbsenceDeduction: new Prisma.Decimal(unpaidAbsenceDeduction.toFixed(2)),
-        otherDeductions: new Prisma.Decimal(otherDeductions.toFixed(2)),
-        totalDeductions: new Prisma.Decimal(totalEmpDeductions.toFixed(2)),
-        netSalary: new Prisma.Decimal(netSalary.toFixed(2)),
-        unrecoveredLiability: new Prisma.Decimal(unrecoveredLiability.toFixed(2)),
-        currency: 'PKR',
-        paymentMethod: 'BANK_TRANSFER',
-        bankName: emp.bankName || null,
-        bankAccountTitle: emp.bankAccountTitle || null,
-        bankAccountNumber: emp.bankAccountNumber || null,
-        bankIban: emp.bankIban || null,
-        paymentStatus: 'UNPAID',
-        transactionReference: null
-      })
-    }
 
     // Generate unique run number e.g. RUN-202611-01
     const periodPrefix = periodCode.replace(/-/g, '')
@@ -1145,6 +1246,43 @@ export const payrollService = {
 
     // Validate payroll employees and salary calculations before approval
     await validatePayrollRunIntegrity(run)
+
+    // Individual Approval Harmony: Cannot approve master run if any entry is individually marked as REJECTED
+    const entryIds = (run.entries || []).map((e) => e.id)
+    if (entryIds.length > 0) {
+      const logs = await prisma.auditLog.findMany({
+        where: {
+          entityName: 'PayrollEntry',
+          entityId: { in: entryIds },
+          actionType: { in: ['APPROVE', 'REJECT'] }
+        },
+        orderBy: { createdAt: 'desc' }
+      }).catch(() => [])
+
+      const latestLogMap = new Map()
+      for (const log of logs) {
+        if (!latestLogMap.has(log.entityId)) {
+          latestLogMap.set(log.entityId, log)
+        }
+      }
+
+      const rejectedEntries = []
+      for (const entry of run.entries) {
+        const latest = latestLogMap.get(entry.id)
+        if (latest && latest.actionType === 'REJECT') {
+          rejectedEntries.push(entry)
+        }
+      }
+
+      if (rejectedEntries.length > 0) {
+        const error = new Error(
+          `Cannot approve payroll run: ${rejectedEntries.length} employee entry(s) have been marked as REJECTED. Please resolve or remove rejected entries before approving the run.`
+        )
+        error.code = 'REJECTED_ENTRIES_EXIST'
+        error.status = 400
+        throw error
+      }
+    }
 
     if (reviewerUser.id === run.processedById && reviewerUser.role !== 'SUPER_ADMIN') {
       const error = new Error('Anti-Self-Approval Violation: The user who processed the draft cannot approve the payroll run.')
@@ -1528,6 +1666,503 @@ export const payrollService = {
     }
 
     return this.getPayrollRunById(run.id, actorUser)
+  },
+
+  /**
+   * Recalculates DRAFT payroll run against canonical PostgreSQL records
+   * (newly eligible employees, effective salary structures, approved leaves, overtime, active loans, FBR tax).
+   * PRESERVES the exact same Payroll Run ID and Run Number.
+   * Supports options.preview = true for non-mutating preview diff.
+   */
+  async refreshDraftPayrollRun(runId, actorUser, options = {}) {
+    if (!runId) {
+      const error = new Error('runId is required to refresh payroll draft.')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
+
+    if (!actorUser || !actorUser.id) {
+      const error = new Error('Authorized actor attribution is required to refresh payroll.')
+      error.code = 'UNAUTHORIZED'
+      error.status = 401
+      throw error
+    }
+
+    const run = await prisma.payrollRun.findUnique({
+      where: { id: runId },
+      include: {
+        payrollPeriod: true,
+        entries: {
+          include: {
+            employee: {
+              select: {
+                id: true,
+                employeeCode: true,
+                firstName: true,
+                lastName: true,
+                department: { select: { name: true } },
+                designation: { select: { title: true } }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!run) {
+      const error = new Error(`Payroll run '${runId}' not found.`)
+      error.code = 'NOT_FOUND'
+      error.status = 404
+      throw error
+    }
+
+    // Historical lock: ONLY DRAFT and PENDING_APPROVAL runs can be refreshed.
+    // APPROVED, DISBURSED, and VOID runs are permanently immutable.
+    if (!['DRAFT', 'PENDING_APPROVAL'].includes(run.status) || run.paymentStatus === 'PAID') {
+      const error = new Error(
+        `Cannot refresh payroll run '${run.runNumber}'. Status is '${run.status}' (payment: ${run.paymentStatus}). Approved, disbursed, and void runs are permanently immutable historical records.`
+      )
+      error.code = 'IMMUTABLE_HISTORICAL_RUN'
+      error.status = 409
+      throw error
+    }
+
+    // Recalculate canonical entries for the period using authoritative calculation engine
+    const {
+      calculatedEntries,
+      employeesWithSalary,
+      totalGross,
+      totalDeductions,
+      totalNet
+    } = await this.calculateCanonicalPeriodEntries(run.payrollPeriod, options)
+
+    // Build diff analysis between current entries and new calculated entries
+    const currentEntriesMap = new Map((run.entries || []).map((e) => [e.employeeId, e]))
+    const newEntriesMap = new Map(calculatedEntries.map((e) => [e.employeeId, e]))
+    const empDetailsMap = new Map(employeesWithSalary.map((e) => [e.id, e]))
+
+    const added = []
+    const removed = []
+    const updated = []
+    const unchanged = []
+
+    for (const [empId, newEntry] of newEntriesMap.entries()) {
+      const current = currentEntriesMap.get(empId)
+      const emp = empDetailsMap.get(empId)
+      const empName = [emp?.firstName, emp?.lastName].filter(Boolean).join(' ') || 'Employee'
+      const empCode = emp?.employeeCode || empId
+
+      if (!current) {
+        added.push({
+          employeeId: empId,
+          employeeCode: empCode,
+          employeeName: empName,
+          grossSalary: Number(newEntry.grossEarnings),
+          netPayable: Number(newEntry.netSalary),
+          totalDeductions: Number(newEntry.totalDeductions)
+        })
+      } else {
+        const curGross = Number(current.grossEarnings || 0)
+        const curNet = Number(current.netSalary || 0)
+        const curDeductions = Number(current.totalDeductions || 0)
+        const newGross = Number(newEntry.grossEarnings)
+        const newNet = Number(newEntry.netSalary)
+        const newDeductions = Number(newEntry.totalDeductions)
+
+        if (
+          Math.abs(curGross - newGross) > 0.01 ||
+          Math.abs(curNet - newNet) > 0.01 ||
+          Math.abs(curDeductions - newDeductions) > 0.01
+        ) {
+          updated.push({
+            employeeId: empId,
+            employeeCode: empCode,
+            employeeName: empName,
+            oldGross: curGross,
+            newGross,
+            grossDiff: newGross - curGross,
+            oldNet: curNet,
+            newNet,
+            netDiff: newNet - curNet,
+            oldDeductions: curDeductions,
+            newDeductions,
+            deductionsDiff: newDeductions - curDeductions
+          })
+        } else {
+          unchanged.push({
+            employeeId: empId,
+            employeeCode: empCode,
+            employeeName: empName
+          })
+        }
+      }
+    }
+
+    for (const [empId, curEntry] of currentEntriesMap.entries()) {
+      if (!newEntriesMap.has(empId)) {
+        const empName = [curEntry.employee?.firstName, curEntry.employee?.lastName].filter(Boolean).join(' ') || 'Employee'
+        removed.push({
+          employeeId: empId,
+          employeeCode: curEntry.employee?.employeeCode || empId,
+          employeeName: empName,
+          grossSalary: Number(curEntry.grossEarnings || 0),
+          netPayable: Number(curEntry.netSalary || 0)
+        })
+      }
+    }
+
+    // Check existing individual approvals
+    const existingEntryIds = (run.entries || []).map((e) => e.id)
+    const existingApprovalLogs = existingEntryIds.length > 0
+      ? await prisma.auditLog.findMany({
+          where: {
+            entityName: 'PayrollEntry',
+            entityId: { in: existingEntryIds },
+            actionType: 'APPROVE'
+          }
+        }).catch(() => [])
+      : []
+
+    const approvedEntriesCount = existingApprovalLogs.length
+    const hasIndividualApprovals = approvedEntriesCount > 0
+
+    const currentGross = Number(run.totalGross || 0)
+    const currentNet = Number(run.totalNet || 0)
+    const currentDeductions = Number(run.totalDeductions || 0)
+
+    const previewData = {
+      preview: true,
+      runId: run.id,
+      runNumber: run.runNumber,
+      periodCode: run.payrollPeriod?.periodCode,
+      currentTotals: {
+        gross: currentGross,
+        net: currentNet,
+        deductions: currentDeductions,
+        headcount: run.entries.length
+      },
+      newTotals: {
+        gross: totalGross,
+        net: totalNet,
+        deductions: totalDeductions,
+        headcount: calculatedEntries.length
+      },
+      diff: {
+        gross: Math.round((totalGross - currentGross) * 100) / 100,
+        net: Math.round((totalNet - currentNet) * 100) / 100,
+        deductions: Math.round((totalDeductions - currentDeductions) * 100) / 100,
+        headcount: calculatedEntries.length - run.entries.length
+      },
+      added,
+      removed,
+      updated,
+      unchangedCount: unchanged.length,
+      hasIndividualApprovals,
+      approvedEntriesCount
+    }
+
+    // Return diff without DB changes if preview mode requested
+    if (options.preview === true) {
+      return previewData
+    }
+
+    // Execute atomic in-place recalculation: PRESERVES exact same run.id and run.runNumber
+    const periodPrefix = run.payrollPeriod.periodCode.replace(/-/g, '')
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete old liabilities associated with old entries of this run
+      if (existingEntryIds.length > 0) {
+        await tx.salaryLiability.deleteMany({
+          where: { payrollEntryId: { in: existingEntryIds } }
+        })
+      }
+
+      // 2. Delete old entries for this run
+      await tx.payrollEntry.deleteMany({
+        where: { payrollRunId: run.id }
+      })
+
+      // 3. Create fresh entries with the same run.id
+      for (const entryData of calculatedEntries) {
+        await tx.payrollEntry.create({
+          data: {
+            ...entryData,
+            payrollRunId: run.id
+          }
+        })
+      }
+
+      // 4. Update the PayrollRun (preserving id and runNumber)
+      const updatedRunRecord = await tx.payrollRun.update({
+        where: { id: run.id },
+        data: {
+          totalEmployees: calculatedEntries.length,
+          totalGross: new Prisma.Decimal(totalGross.toFixed(2)),
+          totalDeductions: new Prisma.Decimal(totalDeductions.toFixed(2)),
+          totalNet: new Prisma.Decimal(totalNet.toFixed(2)),
+          updatedAt: new Date()
+        },
+        include: {
+          entries: true
+        }
+      })
+
+      // 5. Create new salary liabilities if any unrecovered liability exists
+      const liabilitiesToCreate = updatedRunRecord.entries
+        .filter((entry) => Number(entry.unrecoveredLiability) > 0)
+        .map((entry, idx) => ({
+          liabilityNumber: `LIA-${periodPrefix}-${String(idx + 1).padStart(3, '0')}`,
+          employeeId: entry.employeeId,
+          payrollPeriodId: run.payrollPeriodId,
+          payrollEntryId: entry.id,
+          originalAmount: entry.unrecoveredLiability,
+          outstandingBalance: entry.unrecoveredLiability,
+          recoveredAmount: new Prisma.Decimal('0.00'),
+          reason: `Excess deductions exceeding gross earnings in recalculated draft ${run.runNumber}`,
+          status: 'OUTSTANDING'
+        }))
+
+      for (const lia of liabilitiesToCreate) {
+        await tx.salaryLiability.create({ data: lia })
+      }
+
+      // 6. Record immutable AuditLog
+      await tx.auditLog.create({
+        data: {
+          actorUserId: actorUser.id,
+          actorRole: actorUser.role || 'SUPER_ADMIN',
+          sourceModule: 'PAYROLL',
+          actionType: 'UPDATE',
+          entityName: 'PayrollRun',
+          entityId: run.id,
+          reasonOrNotes: options.reason || 'Recalculated DRAFT payroll run against canonical PostgreSQL records',
+          recordSnapshotBefore: {
+            runId: run.id,
+            runNumber: run.runNumber,
+            totalEmployees: run.entries.length,
+            totalGross: currentGross,
+            totalNet: currentNet
+          },
+          recordSnapshotAfter: {
+            runId: run.id,
+            runNumber: run.runNumber,
+            totalEmployees: calculatedEntries.length,
+            totalGross,
+            totalNet,
+            addedCount: added.length,
+            removedCount: removed.length,
+            updatedCount: updated.length
+          }
+        }
+      })
+    })
+
+    const refreshed = await this.getPayrollRunById(run.id)
+    return {
+      ...refreshed,
+      previewDiff: previewData
+    }
+  },
+
+  /**
+   * Approves an individual employee payroll entry.
+   * Enforces server-side RBAC, anti-self-approval, and immutability.
+   * Non-disbursing (does not trigger payment).
+   */
+  async approvePayrollEntry(runId, entryId, actorUser, remarks = '') {
+    if (!runId || !entryId) {
+      const error = new Error('Both runId and entryId are required.')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
+
+    if (!actorUser || !actorUser.id) {
+      const error = new Error('Authorized actor attribution is required.')
+      error.code = 'UNAUTHORIZED'
+      error.status = 401
+      throw error
+    }
+
+    const allowedRoles = ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE_ADMIN', 'HR_MANAGER']
+    const roleUpper = String(actorUser.role || '').toUpperCase()
+    if (!allowedRoles.includes(roleUpper)) {
+      const error = new Error(`Role '${actorUser.role}' is not authorized to approve individual payroll entries.`)
+      error.code = 'FORBIDDEN'
+      error.status = 403
+      throw error
+    }
+
+    const entry = await prisma.payrollEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        employee: true,
+        payrollRun: true
+      }
+    })
+
+    if (!entry || entry.payrollRunId !== runId) {
+      const error = new Error(`Payroll entry '${entryId}' not found in run '${runId}'.`)
+      error.code = 'NOT_FOUND'
+      error.status = 404
+      throw error
+    }
+
+    if (entry.payrollRun.status === 'VOID') {
+      const error = new Error('Cannot approve entries in a VOID payroll run.')
+      error.code = 'INVALID_STATE'
+      error.status = 400
+      throw error
+    }
+
+    // Anti-Self-Approval guard: an employee cannot approve their own payroll entry
+    const actorEmpId = actorUser.employeeId || actorUser.employee?.id
+    const actorEmpCode = actorUser.employeeCode || actorUser.employee?.employeeCode
+    if (
+      (actorEmpId && actorEmpId === entry.employeeId) ||
+      (actorEmpCode && actorEmpCode === entry.employee?.employeeCode)
+    ) {
+      const error = new Error('Anti-Self-Approval Prohibited: You cannot approve your own payroll entry.')
+      error.code = 'SELF_APPROVAL_PROHIBITED'
+      error.status = 403
+      throw error
+    }
+
+    const approverName = [actorUser.firstName, actorUser.lastName].filter(Boolean).join(' ') || actorUser.name || 'Admin'
+    const approvedAt = new Date().toISOString()
+
+    // Immutably record in AuditLog
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: actorUser.id,
+        actorEmployeeCode: actorEmpCode || null,
+        actorRole: actorUser.role || 'SUPER_ADMIN',
+        sourceModule: 'PAYROLL',
+        actionType: 'APPROVE',
+        entityName: 'PayrollEntry',
+        entityId: entryId,
+        reasonOrNotes: remarks || 'Individual payroll entry approved',
+        recordSnapshotAfter: {
+          approvalStatus: 'APPROVED',
+          approvedById: actorUser.id,
+          approvedByName: approverName,
+          approvedAt,
+          employeeCode: entry.employee?.employeeCode,
+          remarks: remarks || null
+        }
+      }
+    })
+
+    return {
+      success: true,
+      entryId,
+      employeeId: entry.employeeId,
+      employeeCode: entry.employee?.employeeCode,
+      approvalStatus: 'APPROVED',
+      approvedById: actorUser.id,
+      approvedByName: approverName,
+      approvedAt,
+      message: `Payroll entry for ${entry.employee?.employeeCode || 'employee'} approved successfully.`
+    }
+  },
+
+  /**
+   * Rejects an individual employee payroll entry with a required reason.
+   */
+  async rejectPayrollEntry(runId, entryId, reason, actorUser) {
+    if (!runId || !entryId) {
+      const error = new Error('Both runId and entryId are required.')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
+
+    if (!reason || !reason.trim()) {
+      const error = new Error('A valid rejection reason is required.')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
+
+    if (!actorUser || !actorUser.id) {
+      const error = new Error('Authorized actor attribution is required.')
+      error.code = 'UNAUTHORIZED'
+      error.status = 401
+      throw error
+    }
+
+    const allowedRoles = ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE_ADMIN', 'HR_MANAGER']
+    const roleUpper = String(actorUser.role || '').toUpperCase()
+    if (!allowedRoles.includes(roleUpper)) {
+      const error = new Error(`Role '${actorUser.role}' is not authorized to reject individual payroll entries.`)
+      error.code = 'FORBIDDEN'
+      error.status = 403
+      throw error
+    }
+
+    const entry = await prisma.payrollEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        employee: true,
+        payrollRun: true
+      }
+    })
+
+    if (!entry || entry.payrollRunId !== runId) {
+      const error = new Error(`Payroll entry '${entryId}' not found in run '${runId}'.`)
+      error.code = 'NOT_FOUND'
+      error.status = 404
+      throw error
+    }
+
+    const actorEmpId = actorUser.employeeId || actorUser.employee?.id
+    const actorEmpCode = actorUser.employeeCode || actorUser.employee?.employeeCode
+    if (
+      (actorEmpId && actorEmpId === entry.employeeId) ||
+      (actorEmpCode && actorEmpCode === entry.employee?.employeeCode)
+    ) {
+      const error = new Error('Anti-Self-Approval Prohibited: You cannot reject your own payroll entry.')
+      error.code = 'SELF_APPROVAL_PROHIBITED'
+      error.status = 403
+      throw error
+    }
+
+    const rejecterName = [actorUser.firstName, actorUser.lastName].filter(Boolean).join(' ') || actorUser.name || 'Admin'
+    const rejectedAt = new Date().toISOString()
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: actorUser.id,
+        actorEmployeeCode: actorEmpCode || null,
+        actorRole: actorUser.role || 'SUPER_ADMIN',
+        sourceModule: 'PAYROLL',
+        actionType: 'REJECT',
+        entityName: 'PayrollEntry',
+        entityId: entryId,
+        reasonOrNotes: reason.trim(),
+        recordSnapshotAfter: {
+          approvalStatus: 'REJECTED',
+          rejectedById: actorUser.id,
+          rejectedByName: rejecterName,
+          rejectedAt,
+          employeeCode: entry.employee?.employeeCode,
+          rejectionReason: reason.trim()
+        }
+      }
+    })
+
+    return {
+      success: true,
+      entryId,
+      employeeId: entry.employeeId,
+      employeeCode: entry.employee?.employeeCode,
+      approvalStatus: 'REJECTED',
+      rejectedById: actorUser.id,
+      rejectedByName: rejecterName,
+      rejectedAt,
+      rejectionReason: reason.trim(),
+      message: `Payroll entry for ${entry.employee?.employeeCode || 'employee'} marked as REJECTED.`
+    }
   },
 
   /**

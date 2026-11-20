@@ -1051,7 +1051,11 @@ export async function syncPayroll() {
               ? (entry.bankIban || emp.bankIban || localEmployee?.iban || null)
               : (emp.bankIban || entry.bankIban || localEmployee?.iban || null),
             paymentStatus: entry.paymentStatus || 'UNPAID',
-            transactionReference: entry.transactionReference || null
+            transactionReference: entry.transactionReference || null,
+            approvalStatus: entry.approvalStatus || (['APPROVED', 'DISBURSED', 'POSTED'].includes(String(r.status || '').toUpperCase()) ? 'APPROVED' : 'PENDING'),
+            approvedBy: entry.approvedByName || entry.approvedBy || (['APPROVED', 'DISBURSED', 'POSTED'].includes(String(r.status || '').toUpperCase()) ? 'Super Admin' : null),
+            approvedAt: entry.approvedAt || (['APPROVED', 'DISBURSED', 'POSTED'].includes(String(r.status || '').toUpperCase()) ? (r.approvedAt || r.disbursedAt) : null),
+            rejectionReason: entry.rejectionReason || null
           }
         })
 
