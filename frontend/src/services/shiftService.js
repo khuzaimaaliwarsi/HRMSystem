@@ -56,7 +56,7 @@ class ShiftService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -69,7 +69,7 @@ class ShiftService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {
@@ -79,69 +79,51 @@ class ShiftService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      let storedShifts = this._getItem(STORAGE_KEYS.SHIFTS, null)
-      if (!storedShifts || !Array.isArray(storedShifts)) {
-        this._setItem(STORAGE_KEYS.SHIFTS, INITIAL_SHIFTS)
-      } else {
-        let changed = false
-        const ids = new Set(storedShifts.map((s) => s.id))
-        // Reconcile CANONICAL_DAY_SHIFT if missing from master list
-        if (!ids.has('SHIFT-01')) {
-          storedShifts.unshift({ ...CANONICAL_DAY_SHIFT })
-          ids.add('SHIFT-01')
+    let storedShifts = this._getItem(STORAGE_KEYS.SHIFTS, null)
+    if (!storedShifts || !Array.isArray(storedShifts) || storedShifts.length === 0) {
+      this._setItem(STORAGE_KEYS.SHIFTS, JSON.parse(JSON.stringify(INITIAL_SHIFTS)))
+    } else {
+      let changed = false
+      const ids = new Set(storedShifts.map((s) => s.id))
+      // Reconcile CANONICAL_DAY_SHIFT if missing from master list
+      if (!ids.has('SHIFT-01')) {
+        storedShifts.unshift({ ...CANONICAL_DAY_SHIFT })
+        ids.add('SHIFT-01')
+        changed = true
+      }
+      for (const initShift of INITIAL_SHIFTS) {
+        if (!ids.has(initShift.id)) {
+          storedShifts.push(initShift)
+          ids.add(initShift.id)
           changed = true
         }
-        for (const initShift of INITIAL_SHIFTS) {
-          if (!ids.has(initShift.id)) {
-            storedShifts.push(initShift)
-            ids.add(initShift.id)
-            changed = true
-          }
-        }
-        if (changed) {
-          this._setItem(STORAGE_KEYS.SHIFTS, storedShifts)
-        }
       }
+      if (changed) {
+        this._setItem(STORAGE_KEYS.SHIFTS, storedShifts)
+      }
+    }
 
-      if (!this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)) {
-        this._setItem(STORAGE_KEYS.ASSIGNMENTS, INITIAL_SHIFT_ASSIGNMENTS)
-      } else {
-        // Reconcile Shift Assignments to enforce Employee Shift Isolation:
-        // QA Test Morning Shift can ONLY be assigned to EMP-005.
-        // If any assignment exists for QA Test Morning Shift with non-EMP-005, clean it up!
-        const storedAssignments = this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)
-        if (storedAssignments && Array.isArray(storedAssignments)) {
-          let asgnChanged = false
-          const filtered = storedAssignments.filter((a) => {
-            const isQaMorning = a.shiftName === 'QA Test Morning Shift' || a.shiftId === 'QA-MOR-01'
-            if (isQaMorning && a.employeeId !== 'EMP-005') {
-              asgnChanged = true
-              return false
-            }
-            return true
-          })
-          if (asgnChanged) {
-            this._setItem(STORAGE_KEYS.ASSIGNMENTS, filtered)
-          }
-        }
-      }
-      if (!this._getItem(STORAGE_KEYS.HOLIDAYS, null)) {
-        this._setItem(STORAGE_KEYS.HOLIDAYS, INITIAL_HOLIDAYS_2026)
-      }
+    const storedAssignments = this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)
+    if (!storedAssignments || !Array.isArray(storedAssignments) || storedAssignments.length === 0) {
+      this._setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.parse(JSON.stringify(INITIAL_SHIFT_ASSIGNMENTS)))
     } else {
-      // In browser runtime, purge any legacy localStorage business data keys
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.SHIFTS)
-          window.localStorage.removeItem(STORAGE_KEYS.ASSIGNMENTS)
+      // Reconcile Shift Assignments to enforce Employee Shift Isolation:
+      // QA Test Morning Shift can ONLY be assigned to EMP-005.
+      let asgnChanged = false
+      const filtered = storedAssignments.filter((a) => {
+        const isQaMorning = a.shiftName === 'QA Test Morning Shift' || a.shiftId === 'QA-MOR-01'
+        if (isQaMorning && a.employeeId !== 'EMP-005') {
+          asgnChanged = true
+          return false
         }
-      } catch {
-        // Safe fallback
+        return true
+      })
+      if (asgnChanged) {
+        this._setItem(STORAGE_KEYS.ASSIGNMENTS, filtered)
       }
-      this.memoryStorage[STORAGE_KEYS.SHIFTS] = []
-      this.memoryStorage[STORAGE_KEYS.ASSIGNMENTS] = []
-      this.memoryStorage[STORAGE_KEYS.HOLIDAYS] = INITIAL_HOLIDAYS_2026
+    }
+    if (!this._getItem(STORAGE_KEYS.HOLIDAYS, null)) {
+      this._setItem(STORAGE_KEYS.HOLIDAYS, INITIAL_HOLIDAYS_2026)
     }
   }
 

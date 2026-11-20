@@ -36,44 +36,27 @@ class ExpenseService {
   }
 
   _initializeStorage() {
-    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.CATEGORIES, null)) {
-        this._setItem(STORAGE_KEYS.CATEGORIES, JSON.parse(JSON.stringify(INITIAL_EXPENSE_CATEGORIES)))
-      }
-      if (!this._getItem(STORAGE_KEYS.CLAIMS, null)) {
-        this._setItem(STORAGE_KEYS.CLAIMS, JSON.parse(JSON.stringify(INITIAL_EXPENSE_CLAIMS)))
-      }
-      if (!this._getItem(STORAGE_KEYS.AUTHORITY_LIMITS, null)) {
-        this._setItem(STORAGE_KEYS.AUTHORITY_LIMITS, JSON.parse(JSON.stringify(INITIAL_FINANCIAL_AUTHORITY_LIMITS)))
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.CATEGORIES] = []
-      this.memoryStorage[STORAGE_KEYS.CLAIMS] = []
-      this.memoryStorage[STORAGE_KEYS.TRAVEL_RECONCILIATIONS] = []
-      this.memoryStorage[STORAGE_KEYS.AUTHORITY_LIMITS] = { managerMaxLimit: 0, hrAdminMaxLimit: 0, superAdminThreshold: 0 }
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.CATEGORIES)
-          window.localStorage.removeItem(STORAGE_KEYS.CLAIMS)
-          window.localStorage.removeItem(STORAGE_KEYS.AUTHORITY_LIMITS)
-          window.localStorage.removeItem('isysware_hrms_f12_expense_categories_v1')
-          window.localStorage.removeItem('isysware_hrms_f12_expense_claims_v1')
-          window.localStorage.removeItem('isysware_hrms_f12_authority_limits_v1')
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existingCats = this._getItem(STORAGE_KEYS.CATEGORIES, null)
+    if (!existingCats || existingCats.length === 0) {
+      this._setItem(STORAGE_KEYS.CATEGORIES, JSON.parse(JSON.stringify(INITIAL_EXPENSE_CATEGORIES)))
+    }
+    const existingClaims = this._getItem(STORAGE_KEYS.CLAIMS, null)
+    if (!existingClaims || existingClaims.length === 0) {
+      this._setItem(STORAGE_KEYS.CLAIMS, JSON.parse(JSON.stringify(INITIAL_EXPENSE_CLAIMS)))
+    }
+    const existingLimits = this._getItem(STORAGE_KEYS.AUTHORITY_LIMITS, null)
+    if (!existingLimits || !existingLimits.managerMaxLimit) {
+      this._setItem(STORAGE_KEYS.AUTHORITY_LIMITS, JSON.parse(JSON.stringify(INITIAL_FINANCIAL_AUTHORITY_LIMITS)))
     }
     if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
       this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
     }
   }
 
-  // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
+  // Safe in-memory storage abstraction
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const stored = window.localStorage.getItem(key)
         if (stored !== null) {
@@ -88,7 +71,7 @@ class ExpenseService {
 
   _setItem(key, val) {
     this.memoryStorage[key] = JSON.parse(JSON.stringify(val))
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(val))
       } catch {

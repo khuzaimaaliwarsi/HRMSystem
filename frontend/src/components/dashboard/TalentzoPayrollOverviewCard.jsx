@@ -89,6 +89,12 @@ export function TalentzoPayrollOverviewCard({
 
     if (Array.isArray(runs) && runs.length > 0) {
       for (const run of runs) {
+        // Exclude VOID, Cancelled, and Reversed runs from active payroll charts
+        const statusLower = String(run.status || '').toLowerCase()
+        if (statusLower === 'void' || statusLower === 'cancelled' || statusLower === 'reversed') {
+          continue
+        }
+
         // Year filter
         const runYear =
           run.payrollPeriod?.year ||

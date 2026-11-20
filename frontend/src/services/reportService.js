@@ -158,7 +158,9 @@ class ReportService {
       // Recompute common summary metrics from filtered rows
       if ('totalRecords' in summary) summary.totalRecords = rows.length
       if ('totalEmployees' in summary) summary.totalEmployees = new Set(rows.map((r) => r.employeeId || r.employeeName || r.id).filter(Boolean)).size || rows.length
-      if ('totalHeadcount' in summary) summary.totalHeadcount = rows.length
+      if ('totalHeadcount' in summary) {
+        summary.totalHeadcount = rows.reduce((sum, r) => sum + (Number(r.totalHeadcount || r.headcount) || 1), 0)
+      }
 
       // Payroll metrics
       if ('totalGross' in summary) summary.totalGross = Math.round(rows.reduce((sum, r) => sum + (Number(r.grossPay || r.grossSalary || r.gross) || 0), 0) * 100) / 100
@@ -168,7 +170,10 @@ class ReportService {
       if ('totalNet' in summary) summary.totalNet = Math.round(rows.reduce((sum, r) => sum + (Number(r.netPayable || r.netSalary || r.netPay || r.net) || 0), 0) * 100) / 100
       if ('totalGrossEarnings' in summary) summary.totalGrossEarnings = Math.round(rows.reduce((sum, r) => sum + (Number(r.totalEarnings || r.grossPay || r.grossSalary) || 0), 0) * 100) / 100
       if ('totalTaxDeductions' in summary) summary.totalTaxDeductions = Math.round(rows.reduce((sum, r) => sum + (Number(r.taxDeduction || r.taxWithheld) || 0), 0) * 100) / 100
-      if ('totalNetDisbursed' in summary) summary.totalNetDisbursed = Math.round(rows.reduce((sum, r) => sum + (Number(r.netSalary || r.netPayable) || 0), 0) * 100) / 100
+      if ('totalNetDisbursed' in summary) {
+        const isDraftRun = rows.some((r) => String(r.status || '').toLowerCase() === 'draft')
+        summary.totalNetDisbursed = isDraftRun ? 0 : Math.round(rows.reduce((sum, r) => sum + (Number(r.netSalary || r.netPayable) || 0), 0) * 100) / 100
+      }
 
       // Leave metrics
       if ('totalOpening' in summary) summary.totalOpening = Math.round(rows.reduce((sum, r) => sum + (Number(r.opening || r.openingBalance) || 0), 0) * 10) / 10

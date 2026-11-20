@@ -83,7 +83,79 @@ describe('F14 Reporting & Analytics — Comprehensive Root-Cause Verification (A
     assert.strictEqual(earlyEmp005.earlyMinutes, 97)
   })
 
-  it('7. All 75 reports execute cleanly and dynamically recompute KPIs from filtered rows', async () => {
+  it('7. RPT-ORG-001 to RPT-ORG-006: Workforce integrity, zero duplicate counts, banking verification and separation safety', async () => {
+    // RPT-ORG-001
+    const org1 = await reportService.generateReport('RPT-ORG-001', {}, superAdmin)
+    assert.strictEqual(org1.rows.length, 14, 'Total employee profiles must be exactly 14')
+    assert.strictEqual(org1.summary.probationCount, 2, 'Probation count must equal 2 (EMP-006, EMP-014)')
+    assert.strictEqual(org1.summary.activeCount, 11, 'Confirmed permanent active count must equal 11')
+
+    // RPT-ORG-002
+    const org2 = await reportService.generateReport('RPT-ORG-002', {}, superAdmin)
+    assert.strictEqual(org2.summary.totalHeadcount, 14, 'Total departmental headcount must not exceed 14 (no duplicate counting across teams)')
+
+    // RPT-ORG-004
+    const org4 = await reportService.generateReport('RPT-ORG-004', {}, superAdmin)
+    assert.strictEqual(org4.summary.totalDue, 2, 'Probation reviews due must be 2')
+    assert.strictEqual(org4.summary.pendingConfirmation, 1, 'Pending confirmation must be 1')
+    assert.strictEqual(org4.summary.confirmedCount, 1, 'Confirmed count must be 1')
+
+    // RPT-ORG-005
+    const org5 = await reportService.generateReport('RPT-ORG-005', {}, superAdmin)
+    assert.strictEqual(org5.summary.pendingVerificationCount, 2, 'Pending bank account verifications must be 2')
+    assert.strictEqual(org5.summary.verifiedCount, 12, 'Verified bank accounts must be 12')
+
+    // RPT-ORG-006
+    const org6 = await reportService.generateReport('RPT-ORG-006', {}, superAdmin)
+    const emp003Sep = org6.rows.find((r) => r.employeeId === 'EMP-003' && r.eventType === 'Separation')
+    const emp011Sep = org6.rows.find((r) => r.employeeId === 'EMP-011' && r.eventType === 'Separation')
+    assert.strictEqual(emp003Sep, undefined, 'Active employee EMP-003 must never be marked Separated')
+    assert.strictEqual(emp011Sep, undefined, 'Active employee EMP-011 must never be marked Separated')
+  })
+
+  it('8. RPT-PAY-002 & RPT-PAY-004: Draft payroll RUN-202611-02 GAAP compliance (disbursement liability = 0)', async () => {
+    // RPT-PAY-002
+    const pay2 = await reportService.generateReport('RPT-PAY-002', {}, superAdmin)
+    assert.strictEqual(pay2.summary.totalGrossEarnings, 180000)
+    assert.strictEqual(pay2.summary.totalNetDisbursed, 0, 'DRAFT payroll has not been disbursed, totalNetDisbursed must be 0')
+
+    // RPT-PAY-004
+    const pay4 = await reportService.generateReport('RPT-PAY-004', {}, superAdmin)
+    assert.strictEqual(pay4.summary.totalDisbursed, 0, 'Disbursed bank transfers must be 0 for draft advice')
+    assert.strictEqual(pay4.summary.totalUnpaidLiability, 179500, 'Unpaid payroll liability must be PKR 179,500')
+    pay4.rows.forEach((r) => {
+      assert.strictEqual(r.batchRef, 'Unbatched (Draft)')
+      assert.strictEqual(r.paymentStatus, 'Draft Advice (Unapproved)')
+      assert.strictEqual(r.amountPaid, 0)
+    })
+  })
+
+  it('9. RPT-BEN-005 & RPT-BEN-007: Canonical loan LN-2026-001 (Principal 9,000, Recovered 0, Outstanding 9,000)', async () => {
+    // RPT-BEN-005
+    const ben5 = await reportService.generateReport('RPT-BEN-005', {}, superAdmin)
+    assert.strictEqual(ben5.rows.length, 1, 'Only active canonical loan LN-2026-001 on ledger')
+    const ln = ben5.rows[0]
+    assert.strictEqual(ln.loanId, 'LN-2026-001')
+    assert.strictEqual(ln.principalAmount, 9000)
+    assert.strictEqual(ln.totalRecovered, 0)
+    assert.strictEqual(ln.outstandingBalance, 9000)
+    assert.strictEqual(ben5.summary.totalOutstandingBalance, 9000)
+
+    // RPT-BEN-007
+    const ben7 = await reportService.generateReport('RPT-BEN-007', {}, superAdmin)
+    assert.strictEqual(ben7.rows.length, 1)
+    const lnSchedule = ben7.rows[0]
+    assert.strictEqual(lnSchedule.installmentDue, 3000)
+    assert.strictEqual(lnSchedule.payrollRecovered, 0)
+    assert.strictEqual(lnSchedule.variance, -3000)
+  })
+
+  it('10. RPT-POL-001: Active policies reflect complete set of corporate governance standards', async () => {
+    const pol1 = await reportService.generateReport('RPT-POL-001', {}, superAdmin)
+    assert.strictEqual(pol1.summary.totalActivePolicies, 11)
+  })
+
+  it('11. All 75 reports execute cleanly and dynamically recompute KPIs from filtered rows', async () => {
     const reports = reportService.getReports()
     assert.strictEqual(reports.length, 75, 'Must have exactly 75 reports')
     for (const r of reports) {

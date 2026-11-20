@@ -80,20 +80,9 @@ class LoanService {
   }
 
   _initialize() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEY, null)) {
-        this._setItem(STORAGE_KEY, INITIAL_LOANS)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEY] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEY)
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existing = this._getItem(STORAGE_KEY, null)
+    if (!existing || existing.length === 0) {
+      this._setItem(STORAGE_KEY, JSON.parse(JSON.stringify(INITIAL_LOANS)))
     }
   }
 

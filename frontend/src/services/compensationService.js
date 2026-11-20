@@ -46,30 +46,17 @@ class CompensationService {
   }
 
   _initialize() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.STRUCTURES, null)) {
-        this._setItem(STORAGE_KEYS.STRUCTURES, INITIAL_SALARY_STRUCTURES)
-      }
-      if (!this._getItem(STORAGE_KEYS.ALLOWANCES, null)) {
-        this._setItem(STORAGE_KEYS.ALLOWANCES, INITIAL_ALLOWANCES)
-      }
-      if (!this._getItem(STORAGE_KEYS.EMP_ALLOWANCES, null)) {
-        this._setItem(STORAGE_KEYS.EMP_ALLOWANCES, INITIAL_EMPLOYEE_ALLOWANCES)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.STRUCTURES] = []
-      this.memoryStorage[STORAGE_KEYS.ALLOWANCES] = []
-      this.memoryStorage[STORAGE_KEYS.EMP_ALLOWANCES] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.STRUCTURES)
-          window.localStorage.removeItem(STORAGE_KEYS.ALLOWANCES)
-          window.localStorage.removeItem(STORAGE_KEYS.EMP_ALLOWANCES)
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existingStructures = this._getItem(STORAGE_KEYS.STRUCTURES, null)
+    if (!existingStructures || existingStructures.length === 0) {
+      this._setItem(STORAGE_KEYS.STRUCTURES, INITIAL_SALARY_STRUCTURES)
+    }
+    const existingAllowances = this._getItem(STORAGE_KEYS.ALLOWANCES, null)
+    if (!existingAllowances || existingAllowances.length === 0) {
+      this._setItem(STORAGE_KEYS.ALLOWANCES, INITIAL_ALLOWANCES)
+    }
+    const existingEmpAllowances = this._getItem(STORAGE_KEYS.EMP_ALLOWANCES, null)
+    if (!existingEmpAllowances || existingEmpAllowances.length === 0) {
+      this._setItem(STORAGE_KEYS.EMP_ALLOWANCES, INITIAL_EMPLOYEE_ALLOWANCES)
     }
   }
 

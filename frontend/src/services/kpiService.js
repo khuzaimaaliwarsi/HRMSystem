@@ -26,7 +26,7 @@ class KpiService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key];
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key);
         return item ? JSON.parse(item) : defaultVal;
@@ -39,7 +39,7 @@ class KpiService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value;
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value));
       } catch {
@@ -49,19 +49,9 @@ class KpiService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEY, null)) {
-        this._setItem(STORAGE_KEY, INITIAL_DEPARTMENT_KPIS);
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEY] = [];
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
-      } catch {
-        // safe fallback
-      }
+    const existing = this._getItem(STORAGE_KEY, null);
+    if (!existing || existing.length === 0) {
+      this._setItem(STORAGE_KEY, JSON.parse(JSON.stringify(INITIAL_DEPARTMENT_KPIS)));
     }
   }
 

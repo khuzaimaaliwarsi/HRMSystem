@@ -46,25 +46,13 @@ class CommissionService {
   }
 
   _initialize() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.PLANS, null)) {
-        this._setItem(STORAGE_KEYS.PLANS, INITIAL_COMMISSION_PLANS)
-      }
-      if (!this._getItem(STORAGE_KEYS.TRANSACTIONS, null)) {
-        this._setItem(STORAGE_KEYS.TRANSACTIONS, INITIAL_COMMISSION_TRANSACTIONS)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.PLANS] = []
-      this.memoryStorage[STORAGE_KEYS.TRANSACTIONS] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.PLANS)
-          window.localStorage.removeItem(STORAGE_KEYS.TRANSACTIONS)
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+    if (!existingPlans || existingPlans.length === 0) {
+      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_PLANS)))
+    }
+    const existingTx = this._getItem(STORAGE_KEYS.TRANSACTIONS, null)
+    if (!existingTx || existingTx.length === 0) {
+      this._setItem(STORAGE_KEYS.TRANSACTIONS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_TRANSACTIONS)))
     }
   }
 
@@ -84,23 +72,20 @@ class CommissionService {
   }
 
   resetToDefaults() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(isTest ? INITIAL_COMMISSION_PLANS : [])))
-    this._setItem(STORAGE_KEYS.TRANSACTIONS, JSON.parse(JSON.stringify(isTest ? INITIAL_COMMISSION_TRANSACTIONS : [])))
+    this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_PLANS)))
+    this._setItem(STORAGE_KEYS.TRANSACTIONS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_TRANSACTIONS)))
     this._notify()
   }
 
   getPlans() {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    return this._getItem(STORAGE_KEYS.PLANS, isTest ? INITIAL_COMMISSION_PLANS : [])
+    return this._getItem(STORAGE_KEYS.PLANS, INITIAL_COMMISSION_PLANS)
   }
 
   /**
    * Get commission transactions scoped by role
    */
   getTransactions(filters = {}, requestingUser = null) {
-    const isTest = typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT
-    let list = [...this._getItem(STORAGE_KEYS.TRANSACTIONS, isTest ? INITIAL_COMMISSION_TRANSACTIONS : [])]
+    let list = [...this._getItem(STORAGE_KEYS.TRANSACTIONS, INITIAL_COMMISSION_TRANSACTIONS)]
 
     if (requestingUser?.role === 'employee' || requestingUser?.role === 'manager') {
       const myId = requestingUser.employeeId || requestingUser.id

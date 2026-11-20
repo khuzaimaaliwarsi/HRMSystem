@@ -47,7 +47,7 @@ class HRLettersService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -60,7 +60,7 @@ class HRLettersService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {
@@ -70,27 +70,16 @@ class HRLettersService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.TEMPLATES, null)) {
-        this._setItem(STORAGE_KEYS.TEMPLATES, INITIAL_LETTER_TEMPLATES)
-      }
-      if (!this._getItem(STORAGE_KEYS.LETTERS, null)) {
-        this._setItem(STORAGE_KEYS.LETTERS, INITIAL_ISSUED_LETTERS)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.TEMPLATES] = []
-      this.memoryStorage[STORAGE_KEYS.LETTERS] = []
-      this.memoryStorage[STORAGE_KEYS.AUDIT_LOGS] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.TEMPLATES)
-          window.localStorage.removeItem(STORAGE_KEYS.LETTERS)
-          window.localStorage.removeItem('isysware_hrms_f11_templates_v1')
-          window.localStorage.removeItem('isysware_hrms_f11_issued_letters_v1')
-        }
-      } catch {
-        // Safe fallback
-      }
+    const existingTemplates = this._getItem(STORAGE_KEYS.TEMPLATES, null)
+    if (!existingTemplates || existingTemplates.length === 0) {
+      this._setItem(STORAGE_KEYS.TEMPLATES, JSON.parse(JSON.stringify(INITIAL_LETTER_TEMPLATES)))
+    }
+    const existingLetters = this._getItem(STORAGE_KEYS.LETTERS, null)
+    if (!existingLetters || existingLetters.length === 0) {
+      this._setItem(STORAGE_KEYS.LETTERS, JSON.parse(JSON.stringify(INITIAL_ISSUED_LETTERS)))
+    }
+    if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
+      this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
     }
   }
 

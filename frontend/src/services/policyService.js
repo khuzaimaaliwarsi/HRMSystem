@@ -66,20 +66,9 @@ class PolicyService {
   }
 
   _initialize() {
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT) {
-      if (!this._getItem(STORAGE_KEYS.POLICIES, null)) {
-        this._setItem(STORAGE_KEYS.POLICIES, INITIAL_POLICIES)
-      }
-    } else {
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.POLICIES)
-          window.localStorage.removeItem('isysware_hrms_f13_central_policies_v1')
-        }
-      } catch {
-        // Fallback
-      }
-      this.memoryStorage[STORAGE_KEYS.POLICIES] = []
+    const existing = this._getItem(STORAGE_KEYS.POLICIES, null)
+    if (!existing || existing.length === 0) {
+      this._setItem(STORAGE_KEYS.POLICIES, JSON.parse(JSON.stringify(INITIAL_POLICIES)))
     }
   }
 

@@ -115,9 +115,9 @@ test('9. Loan Service: Deducts loan installment accurately and updates outstandi
   assert.ok(deductionInfo.totalDeduction >= 0);
 
   // Record installment
-  const res = loanService.recordInstallmentDeduction('LN-2026-001', '2026-09', 10000);
+  const res = loanService.recordInstallmentDeduction('LN-2026-001', '2026-09', 3000);
   assert.ok(res);
-  assert.equal(res.installmentsPaid, 5);
+  assert.equal(res.installmentsPaid, 1);
 });
 
 test('10. Salary Revision: Drafts a revision proposal with automatic delta and percentage change', () => {

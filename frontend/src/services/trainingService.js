@@ -37,7 +37,7 @@ class TrainingService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -50,7 +50,7 @@ class TrainingService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {
@@ -60,43 +60,25 @@ class TrainingService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.PROGRAMS, null)) {
-        this._setItem(STORAGE_KEYS.PROGRAMS, INITIAL_TRAINING_PROGRAMS)
-      }
-      if (!this._getItem(STORAGE_KEYS.PLANS, null)) {
-        this._setItem(STORAGE_KEYS.PLANS, INITIAL_TRAINING_PLANS)
-      }
-      if (!this._getItem(STORAGE_KEYS.SESSIONS, null)) {
-        this._setItem(STORAGE_KEYS.SESSIONS, INITIAL_TRAINING_SESSIONS)
-      }
-      if (!this._getItem(STORAGE_KEYS.ENROLLMENTS, null)) {
-        this._setItem(STORAGE_KEYS.ENROLLMENTS, INITIAL_ENROLLMENTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.CERTIFICATES, null)) {
-        this._setItem(STORAGE_KEYS.CERTIFICATES, INITIAL_CERTIFICATES)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.PROGRAMS] = []
-      this.memoryStorage[STORAGE_KEYS.PLANS] = []
-      this.memoryStorage[STORAGE_KEYS.SESSIONS] = []
-      this.memoryStorage[STORAGE_KEYS.ENROLLMENTS] = []
-      this.memoryStorage[STORAGE_KEYS.CERTIFICATES] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.PROGRAMS)
-          window.localStorage.removeItem(STORAGE_KEYS.PLANS)
-          window.localStorage.removeItem(STORAGE_KEYS.SESSIONS)
-          window.localStorage.removeItem(STORAGE_KEYS.ENROLLMENTS)
-          window.localStorage.removeItem(STORAGE_KEYS.CERTIFICATES)
-          window.localStorage.removeItem('isysware_hrms_f08_training_programs_v1')
-          window.localStorage.removeItem('isysware_hrms_f08_training_sessions_v1')
-          window.localStorage.removeItem('isysware_hrms_f08_training_enrollments_v1')
-          window.localStorage.removeItem('isysware_hrms_f08_training_certificates_v1')
-        }
-      } catch {
-        // safe fallback
-      }
+    const existingPrograms = this._getItem(STORAGE_KEYS.PROGRAMS, null)
+    if (!existingPrograms || existingPrograms.length === 0) {
+      this._setItem(STORAGE_KEYS.PROGRAMS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PROGRAMS)))
+    }
+    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+    if (!existingPlans || existingPlans.length === 0) {
+      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PLANS)))
+    }
+    const existingSessions = this._getItem(STORAGE_KEYS.SESSIONS, null)
+    if (!existingSessions || existingSessions.length === 0) {
+      this._setItem(STORAGE_KEYS.SESSIONS, JSON.parse(JSON.stringify(INITIAL_TRAINING_SESSIONS)))
+    }
+    const existingEnrollments = this._getItem(STORAGE_KEYS.ENROLLMENTS, null)
+    if (!existingEnrollments || existingEnrollments.length === 0) {
+      this._setItem(STORAGE_KEYS.ENROLLMENTS, JSON.parse(JSON.stringify(INITIAL_ENROLLMENTS)))
+    }
+    const existingCerts = this._getItem(STORAGE_KEYS.CERTIFICATES, null)
+    if (!existingCerts || existingCerts.length === 0) {
+      this._setItem(STORAGE_KEYS.CERTIFICATES, JSON.parse(JSON.stringify(INITIAL_CERTIFICATES)))
     }
   }
 

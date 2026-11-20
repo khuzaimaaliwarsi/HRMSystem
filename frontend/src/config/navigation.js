@@ -213,9 +213,9 @@ export const PORTAL_CONFIG = {
               { key: 'fam_pay', label: 'Payroll, Employee Pay & Banking Reports', path: '/super-admin/reports?family=fam_pay' },
               { key: 'fam_tax', label: 'Tax & Statutory Reports (FBR)', path: '/super-admin/reports?family=fam_tax' },
               { key: 'fam_ben', label: 'Commissions, Loans & Benefits Reports', path: '/super-admin/reports?family=fam_ben' },
-              { key: 'fam_prf', label: 'Tasks, Performance & Training Reports', path: '/super-admin/reports?family=fam_prf' },
+              { key: 'fam_per', label: 'Tasks, Performance & Training Reports', path: '/super-admin/reports?family=fam_per' },
               { key: 'fam_pol', label: 'Policy Governance & Approval Reports', path: '/super-admin/reports?family=fam_pol' },
-              { key: 'fam_hld', label: 'Help Desk Service & SLA Reports', path: '/super-admin/reports?family=fam_hld' },
+              { key: 'fam_hlp', label: 'Help Desk Service & SLA Reports', path: '/super-admin/reports?family=fam_hlp' },
               { key: 'fam_trv', label: 'Travel, Pick-and-Drop & Expense Reports', path: '/super-admin/reports?family=fam_trv' },
               { key: 'fam_sec', label: 'HR Letters, Alerts & Security Reports', path: '/super-admin/reports?family=fam_sec' }
             ]
@@ -446,8 +446,8 @@ export const PORTAL_CONFIG = {
               { key: 'fam_pay', label: 'Payroll, Employee Pay & Banking Reports', path: '/hr-admin/reports?family=fam_pay' },
               { key: 'fam_tax', label: 'Tax & Statutory Statements', path: '/hr-admin/reports?family=fam_tax' },
               { key: 'fam_ben', label: 'Commissions, Loans & Benefits Reports', path: '/hr-admin/reports?family=fam_ben' },
-              { key: 'fam_prf', label: 'Tasks, Performance & Training Reports', path: '/hr-admin/reports?family=fam_prf' },
-              { key: 'fam_hld', label: 'Help Desk Service & SLA Reports', path: '/hr-admin/reports?family=fam_hld' },
+              { key: 'fam_per', label: 'Tasks, Performance & Training Reports', path: '/hr-admin/reports?family=fam_per' },
+              { key: 'fam_hlp', label: 'Help Desk Service & SLA Reports', path: '/hr-admin/reports?family=fam_hlp' },
               { key: 'fam_trv', label: 'Travel, Pick-and-Drop & Expense Reports', path: '/hr-admin/reports?family=fam_trv' }
             ]
           },
@@ -645,7 +645,7 @@ export const PORTAL_CONFIG = {
             submodules: [
               { key: 'fam_att', label: 'Team Attendance Reports', path: '/manager/reports?family=fam_att' },
               { key: 'fam_lev', label: 'Team Leave Summary Reports', path: '/manager/reports?family=fam_lev' },
-              { key: 'fam_prf', label: 'Team Tasks & Performance Reports', path: '/manager/reports?family=fam_prf' },
+              { key: 'fam_per', label: 'Team Tasks & Performance Reports', path: '/manager/reports?family=fam_per' },
               { key: 'fam_trv', label: 'Team Travel & Transport Reports', path: '/manager/reports?family=fam_trv' }
             ]
           }
@@ -742,7 +742,7 @@ export const PORTAL_CONFIG = {
             submodules: [
               { key: 'fam_att', label: 'Team Attendance Statement', path: '/team-lead/reports?family=fam_att' },
               { key: 'fam_lev', label: 'Team Leave Utilization', path: '/team-lead/reports?family=fam_lev' },
-              { key: 'fam_prf', label: 'Team Deliverables & Performance', path: '/team-lead/reports?family=fam_prf' }
+              { key: 'fam_per', label: 'Team Deliverables & Performance', path: '/team-lead/reports?family=fam_per' }
             ]
           }
         ]

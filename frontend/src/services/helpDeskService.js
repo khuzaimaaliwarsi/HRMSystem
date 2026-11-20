@@ -50,7 +50,7 @@ class HelpDeskService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -63,7 +63,7 @@ class HelpDeskService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {
@@ -73,32 +73,19 @@ class HelpDeskService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.TICKETS, null)) {
-        this._setItem(STORAGE_KEYS.TICKETS, INITIAL_TICKETS)
-      }
-      if (!this._getItem(STORAGE_KEYS.CATEGORIES, null)) {
-        this._setItem(STORAGE_KEYS.CATEGORIES, TICKET_CATEGORIES)
-      }
-      if (!this._getItem(STORAGE_KEYS.TEAMS, null)) {
-        this._setItem(STORAGE_KEYS.TEAMS, SUPPORT_TEAMS)
-      }
-      this._setItem(STORAGE_KEYS.SLA_TARGETS, SLA_TARGETS)
-    } else {
-      this.memoryStorage[STORAGE_KEYS.TICKETS] = []
-      this.memoryStorage[STORAGE_KEYS.CATEGORIES] = TICKET_CATEGORIES
-      this.memoryStorage[STORAGE_KEYS.TEAMS] = SUPPORT_TEAMS
-      this.memoryStorage[STORAGE_KEYS.SLA_TARGETS] = SLA_TARGETS
-      this.memoryStorage[STORAGE_KEYS.KPIS] = null
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.TICKETS)
-          window.localStorage.removeItem('isysware_hrms_f09_helpdesk_tickets_v1')
-        }
-      } catch {
-        // safe fallback
-      }
+    const existingTickets = this._getItem(STORAGE_KEYS.TICKETS, null)
+    if (!existingTickets || existingTickets.length === 0) {
+      this._setItem(STORAGE_KEYS.TICKETS, JSON.parse(JSON.stringify(INITIAL_TICKETS)))
     }
+    const existingCats = this._getItem(STORAGE_KEYS.CATEGORIES, null)
+    if (!existingCats || existingCats.length === 0) {
+      this._setItem(STORAGE_KEYS.CATEGORIES, JSON.parse(JSON.stringify(TICKET_CATEGORIES)))
+    }
+    const existingTeams = this._getItem(STORAGE_KEYS.TEAMS, null)
+    if (!existingTeams || existingTeams.length === 0) {
+      this._setItem(STORAGE_KEYS.TEAMS, JSON.parse(JSON.stringify(SUPPORT_TEAMS)))
+    }
+    this._setItem(STORAGE_KEYS.SLA_TARGETS, SLA_TARGETS)
   }
 
   subscribe(listener) {

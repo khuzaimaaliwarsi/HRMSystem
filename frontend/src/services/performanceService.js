@@ -48,7 +48,7 @@ class PerformanceService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key];
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key);
         return item ? JSON.parse(item) : defaultVal;
@@ -61,7 +61,7 @@ class PerformanceService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value;
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value));
       } catch {
@@ -71,36 +71,20 @@ class PerformanceService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.CYCLES, null)) {
-        this._setItem(STORAGE_KEYS.CYCLES, INITIAL_APPRAISAL_CYCLES);
-      }
-      if (!this._getItem(STORAGE_KEYS.REVIEWS, null)) {
-        this._setItem(STORAGE_KEYS.REVIEWS, INITIAL_EMPLOYEE_REVIEWS);
-      }
-      if (!this._getItem(STORAGE_KEYS.PLANS, null)) {
-        this._setItem(STORAGE_KEYS.PLANS, INITIAL_DEVELOPMENT_PLANS);
-      }
-      if (!this._getItem(STORAGE_KEYS.FEEDBACKS, null)) {
-        this._setItem(STORAGE_KEYS.FEEDBACKS, []);
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.CYCLES] = [];
-      this.memoryStorage[STORAGE_KEYS.REVIEWS] = [];
-      this.memoryStorage[STORAGE_KEYS.PLANS] = [];
-      this.memoryStorage[STORAGE_KEYS.FEEDBACKS] = [];
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.CYCLES);
-          window.localStorage.removeItem(STORAGE_KEYS.REVIEWS);
-          window.localStorage.removeItem(STORAGE_KEYS.PLANS);
-          window.localStorage.removeItem('isysware_hrms_f07_appraisal_cycles_v1');
-          window.localStorage.removeItem('isysware_hrms_f07_performance_reviews_v1');
-          window.localStorage.removeItem('isysware_hrms_f07_pip_plans_v1');
-        }
-      } catch {
-        // safe fallback
-      }
+    const existingCycles = this._getItem(STORAGE_KEYS.CYCLES, null);
+    if (!existingCycles || existingCycles.length === 0) {
+      this._setItem(STORAGE_KEYS.CYCLES, JSON.parse(JSON.stringify(INITIAL_APPRAISAL_CYCLES)));
+    }
+    const existingReviews = this._getItem(STORAGE_KEYS.REVIEWS, null);
+    if (!existingReviews || existingReviews.length === 0) {
+      this._setItem(STORAGE_KEYS.REVIEWS, JSON.parse(JSON.stringify(INITIAL_EMPLOYEE_REVIEWS)));
+    }
+    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null);
+    if (!existingPlans || existingPlans.length === 0) {
+      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_DEVELOPMENT_PLANS)));
+    }
+    if (!this._getItem(STORAGE_KEYS.FEEDBACKS, null)) {
+      this._setItem(STORAGE_KEYS.FEEDBACKS, []);
     }
   }
 

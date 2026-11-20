@@ -44,7 +44,7 @@ class TravelService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -57,7 +57,7 @@ class TravelService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (isTest && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {
@@ -67,53 +67,36 @@ class TravelService {
   }
 
   _initialize() {
-    if (isTest) {
-      if (!this._getItem(STORAGE_KEYS.VEHICLES, null)) {
-        this._setItem(STORAGE_KEYS.VEHICLES, INITIAL_VEHICLES)
-      }
-      if (!this._getItem(STORAGE_KEYS.DRIVERS, null)) {
-        this._setItem(STORAGE_KEYS.DRIVERS, INITIAL_DRIVERS)
-      }
-      if (!this._getItem(STORAGE_KEYS.ROUTES, null)) {
-        this._setItem(STORAGE_KEYS.ROUTES, INITIAL_ROUTES)
-      }
-      if (!this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)) {
-        this._setItem(STORAGE_KEYS.ASSIGNMENTS, INITIAL_TRANSPORT_ASSIGNMENTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.REQUESTS, null)) {
-        this._setItem(STORAGE_KEYS.REQUESTS, INITIAL_TRAVEL_REQUESTS)
-      }
-      if (!this._getItem(STORAGE_KEYS.PLANS, null)) {
-        this._setItem(STORAGE_KEYS.PLANS, INITIAL_TRAVEL_PLANS)
-      }
-      if (!this._getItem(STORAGE_KEYS.EXPENSES, null)) {
-        this._setItem(STORAGE_KEYS.EXPENSES, INITIAL_TRAVEL_EXPENSES)
-      }
-    } else {
-      this.memoryStorage[STORAGE_KEYS.VEHICLES] = []
-      this.memoryStorage[STORAGE_KEYS.DRIVERS] = []
-      this.memoryStorage[STORAGE_KEYS.ROUTES] = []
-      this.memoryStorage[STORAGE_KEYS.ASSIGNMENTS] = []
-      this.memoryStorage[STORAGE_KEYS.REQUESTS] = []
-      this.memoryStorage[STORAGE_KEYS.PLANS] = []
-      this.memoryStorage[STORAGE_KEYS.EXPENSES] = []
-      this.memoryStorage[STORAGE_KEYS.AUDIT_LOGS] = []
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.VEHICLES)
-          window.localStorage.removeItem(STORAGE_KEYS.DRIVERS)
-          window.localStorage.removeItem(STORAGE_KEYS.ROUTES)
-          window.localStorage.removeItem(STORAGE_KEYS.ASSIGNMENTS)
-          window.localStorage.removeItem(STORAGE_KEYS.REQUESTS)
-          window.localStorage.removeItem(STORAGE_KEYS.PLANS)
-          window.localStorage.removeItem(STORAGE_KEYS.EXPENSES)
-          window.localStorage.removeItem('isysware_hrms_f10_travel_requests_v1')
-          window.localStorage.removeItem('isysware_hrms_f10_travel_expenses_v1')
-          window.localStorage.removeItem('isysware_hrms_f10_transport_passes_v1')
-        }
-      } catch {
-        // safe fallback
-      }
+    const existingVehicles = this._getItem(STORAGE_KEYS.VEHICLES, null)
+    if (!existingVehicles || existingVehicles.length === 0) {
+      this._setItem(STORAGE_KEYS.VEHICLES, JSON.parse(JSON.stringify(INITIAL_VEHICLES)))
+    }
+    const existingDrivers = this._getItem(STORAGE_KEYS.DRIVERS, null)
+    if (!existingDrivers || existingDrivers.length === 0) {
+      this._setItem(STORAGE_KEYS.DRIVERS, JSON.parse(JSON.stringify(INITIAL_DRIVERS)))
+    }
+    const existingRoutes = this._getItem(STORAGE_KEYS.ROUTES, null)
+    if (!existingRoutes || existingRoutes.length === 0) {
+      this._setItem(STORAGE_KEYS.ROUTES, JSON.parse(JSON.stringify(INITIAL_ROUTES)))
+    }
+    const existingAssignments = this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)
+    if (!existingAssignments || existingAssignments.length === 0) {
+      this._setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.parse(JSON.stringify(INITIAL_TRANSPORT_ASSIGNMENTS)))
+    }
+    const existingRequests = this._getItem(STORAGE_KEYS.REQUESTS, null)
+    if (!existingRequests || existingRequests.length === 0) {
+      this._setItem(STORAGE_KEYS.REQUESTS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_REQUESTS)))
+    }
+    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+    if (!existingPlans || existingPlans.length === 0) {
+      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_PLANS)))
+    }
+    const existingExpenses = this._getItem(STORAGE_KEYS.EXPENSES, null)
+    if (!existingExpenses || existingExpenses.length === 0) {
+      this._setItem(STORAGE_KEYS.EXPENSES, JSON.parse(JSON.stringify(INITIAL_TRAVEL_EXPENSES)))
+    }
+    if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
+      this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
     }
   }
 

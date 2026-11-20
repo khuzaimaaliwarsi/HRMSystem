@@ -9,12 +9,25 @@ import ReportSummary from './ReportSummary'
 import ReportTable from './ReportTable'
 import ReportExportActions from './ReportExportActions'
 
+function normalizeFamilyId(id) {
+  if (!id) return 'fam_org'
+  const map = {
+    fam_prf: 'fam_per',
+    fam_perf: 'fam_per',
+    fam_performance: 'fam_per',
+    fam_hld: 'fam_hlp',
+    fam_help: 'fam_hlp'
+  }
+  return map[id] || id
+}
+
 export default function ReportViewer({ initialFamilyId = 'fam_org', initialReportId = 'RPT-ORG-001' }) {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const families = useMemo(() => reportService.getFamilies(), [])
 
-  const familyFromUrl = searchParams.get('family')
+  const rawFamilyFromUrl = searchParams.get('family')
+  const familyFromUrl = normalizeFamilyId(rawFamilyFromUrl)
   const reportFromUrl = searchParams.get('report')
 
   // Selected family state
@@ -44,6 +57,16 @@ export default function ReportViewer({ initialFamilyId = 'fam_org', initialRepor
       setSelectedReportId(reportFromUrl)
     }
   }, [reportFromUrl])
+
+  // Ensure selected report is always strictly valid within the current family
+  useEffect(() => {
+    if (availableReports.length > 0) {
+      const exists = availableReports.some((r) => r.id === selectedReportId)
+      if (!exists) {
+        setSelectedReportId(availableReports[0].id)
+      }
+    }
+  }, [availableReports, selectedReportId])
 
   // Keep selected report valid when family changes
   const currentFamily = useMemo(() => {
@@ -140,22 +163,51 @@ export default function ReportViewer({ initialFamilyId = 'fam_org', initialRepor
           </div>
         </div>
 
-        {/* Report Selector Dropdown within Active Family */}
-        <div className="pt-3 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-hrms-text whitespace-nowrap">
-            Select Report in this Family:
-          </span>
-          <select
-            value={selectedReportId}
-            onChange={(e) => setSelectedReportId(e.target.value)}
-            className="flex-1 max-w-md text-xs h-8 px-3 bg-slate-50 border border-hrms-border rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-hrms-primary focus:outline-none"
-          >
-            {availableReports.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.number}. {r.name} ({r.id})
-              </option>
-            ))}
-          </select>
+        {/* Family & Report Selector Controls */}
+        <div className="pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-hrms-text whitespace-nowrap min-w-[80px]">
+              Report Family:
+            </span>
+            <select
+              value={selectedFamilyId}
+              onChange={(e) => {
+                const newFamId = e.target.value
+                setSelectedFamilyId(newFamId)
+                const newRpts = reportService.getReports(newFamId, user)
+                const firstRptId = newRpts[0]?.id || ''
+                if (firstRptId) setSelectedReportId(firstRptId)
+                setSearchParams({ family: newFamId, ...(firstRptId ? { report: firstRptId } : {}) })
+              }}
+              className="flex-1 text-xs h-8 px-2.5 bg-slate-50 border border-hrms-border rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-hrms-primary focus:outline-none"
+            >
+              {families.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-hrms-text whitespace-nowrap min-w-[80px]">
+              Active Report:
+            </span>
+            <select
+              value={selectedReportId}
+              onChange={(e) => {
+                setSelectedReportId(e.target.value)
+                setSearchParams({ family: selectedFamilyId, report: e.target.value })
+              }}
+              className="flex-1 text-xs h-8 px-2.5 bg-slate-50 border border-hrms-border rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-hrms-primary focus:outline-none"
+            >
+              {availableReports.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.number}. {r.name} ({r.id})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
