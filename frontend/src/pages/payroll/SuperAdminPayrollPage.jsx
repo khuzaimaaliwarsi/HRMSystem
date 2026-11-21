@@ -57,7 +57,22 @@ export default function SuperAdminPayrollPage() {
   const [refreshPreviewData, setRefreshPreviewData] = useState(null);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [breakdownPeriod, setBreakdownPeriod] = useState('2026-11');
+  const [breakdownPeriod, setBreakdownPeriodState] = useState(() => {
+    try {
+      return sessionStorage.getItem('hrms_selected_payroll_period') || '2026-11';
+    } catch {
+      return '2026-11';
+    }
+  });
+
+  const setBreakdownPeriod = (period) => {
+    setBreakdownPeriodState(period);
+    try {
+      sessionStorage.setItem('hrms_selected_payroll_period', period);
+    } catch {
+      // ignore
+    }
+  };
 
   // Period generator
   const [newRunPeriod, setNewRunPeriod] = useState('2026-11');
@@ -179,9 +194,29 @@ export default function SuperAdminPayrollPage() {
 
     const gross = breakdown.reduce((sum, item) => sum + Number(item.grossSalary || 0), 0);
     const net = breakdown.reduce((sum, item) => sum + Number(item.netPayable || 0), 0);
-    if (!Number.isFinite(gross) || !Number.isFinite(net) ||
-      Math.abs(gross - Number(run.grossPayroll)) > 0.01 ||
-      Math.abs(net - Number(run.netPayable)) > 0.01) {
+    const loans = breakdown.reduce((sum, item) => sum + Number(item.loanDeduction || 0), 0);
+    const taxes = breakdown.reduce((sum, item) => sum + Number(item.salaryTaxWithheld || item.incomeTax || 0), 0);
+    const deductions = breakdown.reduce((sum, item) => sum + Number(item.totalDeductions || 0), 0);
+
+    const hasEntryMismatch = breakdown.some(
+      (item) => Math.abs(Math.max(0, Number(item.grossSalary || 0) - Number(item.totalDeductions || 0)) - Number(item.netPayable || 0)) > 0.01
+    );
+    if (hasEntryMismatch) {
+      return 'Payroll contains employee entry arithmetic mismatch between gross, deductions, and net.';
+    }
+
+    const recordedLoans = run.totalLoanDeductions != null ? Number(run.totalLoanDeductions) : null;
+    const recordedTax = run.totalTax != null ? Number(run.totalTax) : (run.totalTaxWithheld != null ? Number(run.totalTaxWithheld) : null);
+    const recordedDeductions = run.totalDeductions != null ? Number(run.totalDeductions) : null;
+
+    if (
+      !Number.isFinite(gross) || !Number.isFinite(net) ||
+      Math.abs(gross - Number(run.grossPayroll || run.totalGross || 0)) > 0.01 ||
+      Math.abs(net - Number(run.netPayable || run.totalNet || 0)) > 0.01 ||
+      (recordedDeductions != null && Math.abs(deductions - recordedDeductions) > 0.01) ||
+      (recordedLoans != null && Math.abs(loans - recordedLoans) > 0.01) ||
+      (recordedTax != null && Math.abs(taxes - recordedTax) > 0.01)
+    ) {
       return 'Payroll summary totals do not reconcile with employee calculations.';
     }
 

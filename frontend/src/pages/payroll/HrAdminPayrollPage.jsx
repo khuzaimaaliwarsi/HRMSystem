@@ -55,7 +55,22 @@ export default function HrAdminPayrollPage() {
   const [refreshPreviewData, setRefreshPreviewData] = useState(null);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [breakdownPeriod, setBreakdownPeriod] = useState('2026-11');
+  const [breakdownPeriod, setBreakdownPeriodState] = useState(() => {
+    try {
+      return sessionStorage.getItem('hrms_selected_payroll_period') || '2026-11';
+    } catch {
+      return '2026-11';
+    }
+  });
+
+  const setBreakdownPeriod = (period) => {
+    setBreakdownPeriodState(period);
+    try {
+      sessionStorage.setItem('hrms_selected_payroll_period', period);
+    } catch {
+      // ignore
+    }
+  };
 
   const [newRunPeriod, setNewRunPeriod] = useState('2026-11');
   const [isGenerating, setIsGenerating] = useState(false);

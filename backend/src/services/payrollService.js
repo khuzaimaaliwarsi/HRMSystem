@@ -281,21 +281,27 @@ function assessPayrollRunReconciliation(run) {
   let entriesGross = 0
   let entriesDeductions = 0
   let entriesNet = 0
+  let entriesLoan = 0
+  let entriesTax = 0
   let hasEntryArithmeticMismatch = false
 
   const inactiveEmployees = []
   const missingStructureEmployees = []
 
   for (const entry of entries) {
-    const entryGross = Number(entry.grossEarnings)
-    const entryDeductions = Number(entry.totalDeductions)
-    const entryNet = Number(entry.netSalary)
+    const entryGross = Number(entry.grossEarnings ?? entry.grossSalary ?? 0)
+    const entryDeductions = Number(entry.totalDeductions ?? 0)
+    const entryNet = Number(entry.netSalary ?? entry.netPayable ?? 0)
+    const entryLoan = Number(entry.loanDeduction ?? entry.loanDeductions ?? 0)
+    const entryTax = Number(entry.taxDeduction ?? entry.incomeTax ?? entry.salaryTaxWithheld ?? 0)
     if (Math.abs(Math.max(0, entryGross - entryDeductions) - entryNet) > 0.01) {
       hasEntryArithmeticMismatch = true
     }
     entriesGross += entryGross
     entriesDeductions += entryDeductions
     entriesNet += entryNet
+    entriesLoan += entryLoan
+    entriesTax += entryTax
 
     const emp = entry.employee
     if (!emp || !isEmployeeEligibleForPeriod(emp, periodStartStr, periodEndStr)) {
@@ -311,14 +317,19 @@ function assessPayrollRunReconciliation(run) {
     }
   }
 
+  const loanMatches = run?.totalLoanDeductions == null || Math.abs(entriesLoan - Number(run.totalLoanDeductions)) <= 0.01
+  const taxMatches = run?.totalTax == null || Math.abs(entriesTax - Number(run.totalTax)) <= 0.01
+
   const totalsMatch =
     !hasEntryArithmeticMismatch &&
     Math.abs(entriesGross - Number(run?.totalGross ?? 0)) <= 0.01 &&
     Math.abs(entriesDeductions - Number(run?.totalDeductions ?? 0)) <= 0.01 &&
-    Math.abs(entriesNet - Number(run?.totalNet ?? 0)) <= 0.01
+    Math.abs(entriesNet - Number(run?.totalNet ?? 0)) <= 0.01 &&
+    loanMatches &&
+    taxMatches
 
   if (!totalsMatch) {
-    reconciliationIssues.push('Summary totals do not reconcile with employee entries.')
+    reconciliationIssues.push('Financial mismatch: Summary totals do not reconcile with employee entries.')
   }
   if (inactiveEmployees.length > 0) {
     reconciliationIssues.push(`Contains ineligible/non-ACTIVE employee(s): ${inactiveEmployees.join(', ')}.`)
@@ -361,10 +372,14 @@ async function validatePayrollRunIntegrity(run) {
   let gross = 0
   let deductions = 0
   let net = 0
+  let loanTotal = 0
+  let taxTotal = 0
   for (const entry of run.entries) {
-    const entryGross = Number(entry.grossEarnings)
-    const entryDeductions = Number(entry.totalDeductions)
-    const entryNet = Number(entry.netSalary)
+    const entryGross = Number(entry.grossEarnings ?? entry.grossSalary ?? 0)
+    const entryDeductions = Number(entry.totalDeductions ?? 0)
+    const entryNet = Number(entry.netSalary ?? entry.netPayable ?? 0)
+    const entryLoan = Number(entry.loanDeduction ?? entry.loanDeductions ?? 0)
+    const entryTax = Number(entry.taxDeduction ?? entry.incomeTax ?? entry.salaryTaxWithheld ?? 0)
     const expectedNet = Math.max(0, entryGross - entryDeductions)
     if (Math.abs(expectedNet - entryNet) > 0.01) {
       const error = new Error('Payroll entry net salary does not reconcile with gross earnings and deductions.')
@@ -375,12 +390,16 @@ async function validatePayrollRunIntegrity(run) {
     gross += entryGross
     deductions += entryDeductions
     net += entryNet
+    loanTotal += entryLoan
+    taxTotal += entryTax
   }
 
   if (
     Math.abs(gross - Number(run.totalGross)) > 0.01 ||
     Math.abs(deductions - Number(run.totalDeductions)) > 0.01 ||
-    Math.abs(net - Number(run.totalNet)) > 0.01
+    Math.abs(net - Number(run.totalNet)) > 0.01 ||
+    (run.totalLoanDeductions != null && Math.abs(loanTotal - Number(run.totalLoanDeductions)) > 0.01) ||
+    (run.totalTax != null && Math.abs(taxTotal - Number(run.totalTax)) > 0.01)
   ) {
     const error = new Error('Payroll totals do not reconcile with employee entries.')
     error.code = 'PAYROLL_TOTAL_MISMATCH'
@@ -881,9 +900,17 @@ export const payrollService = {
         return rDate >= startDate && rDate <= endDate
       })
       if (!alreadyRepaidInPeriod) {
-        if (loan.employeeId) loansByEmp.set(loan.employeeId, loan)
-        if (loan.employee?.id) loansByEmp.set(loan.employee.id, loan)
-        if (loan.employee?.employeeCode) loansByEmp.set(loan.employee.employeeCode, loan)
+        const appendLoan = (key) => {
+          if (!key) return
+          const existing = loansByEmp.get(key) || []
+          if (!existing.some((l) => l.id === loan.id)) {
+            existing.push(loan)
+            loansByEmp.set(key, existing)
+          }
+        }
+        appendLoan(loan.employeeId)
+        appendLoan(loan.employee?.id)
+        appendLoan(loan.employee?.employeeCode)
       }
     }
 
@@ -950,9 +977,9 @@ export const payrollService = {
       const taxDeduction = taxCalc.taxDeduction
 
       let loanDeduction = 0
-      const activeLoan = loansByEmp.get(emp.id) || (emp.employeeCode ? loansByEmp.get(emp.employeeCode) : null)
-      if (activeLoan) {
-        loanDeduction = Math.min(Number(activeLoan.monthlyInstallment), Number(activeLoan.remainingBalance))
+      const activeLoansList = loansByEmp.get(emp.id) || (emp.employeeCode ? loansByEmp.get(emp.employeeCode) : []) || []
+      for (const activeLoan of activeLoansList) {
+        loanDeduction += Math.min(Number(activeLoan.monthlyInstallment), Number(activeLoan.remainingBalance))
       }
 
       const totalEmpDeductions = taxDeduction + unpaidAbsenceDeduction + loanDeduction + otherDeductions

@@ -545,21 +545,62 @@ class PayrollService {
     const currentHeadcount = (run.employeeBreakdown || []).length
     const currentGross = Number(run.grossPayroll || run.totalGross || 0)
     const currentNet = Number(run.netPayable || run.totalNet || 0)
+    const currentDeductions = Number(run.totalDeductions || 0)
+    const currentLoans = Number(run.totalLoanDeductions || 0)
     const approvedEntries = (run.employeeBreakdown || []).filter((e) => String(e.approvalStatus || '').toUpperCase() === 'APPROVED')
+
+    const recalculated = this._enrichRunWithEmployees({ ...run })
+    const newHeadcount = (recalculated.employeeBreakdown || []).length
+    const newGross = Number(recalculated.grossPayroll || recalculated.totalGross || 0)
+    const newNet = Number(recalculated.netPayable || recalculated.totalNet || 0)
+    const newDeductions = Number(recalculated.totalDeductions || 0)
+    const newLoans = Number(recalculated.totalLoanDeductions || 0)
+
+    const updated = []
+    const currentBreakdown = run.employeeBreakdown || []
+    const newBreakdown = recalculated.employeeBreakdown || []
+
+    for (const newEntry of newBreakdown) {
+      const oldEntry = currentBreakdown.find((e) => e.employeeId === newEntry.employeeId)
+      if (oldEntry) {
+        const netDiff = Number(newEntry.netPayable || 0) - Number(oldEntry.netPayable || 0)
+        const loanDiff = Number(newEntry.loanDeduction || 0) - Number(oldEntry.loanDeduction || 0)
+        const deductionsDiff = Number(newEntry.totalDeductions || 0) - Number(oldEntry.totalDeductions || 0)
+        if (Math.abs(netDiff) > 0.01 || Math.abs(loanDiff) > 0.01 || Math.abs(deductionsDiff) > 0.01) {
+          updated.push({
+            employeeId: newEntry.employeeId,
+            employeeName: newEntry.employeeName,
+            oldNet: Number(oldEntry.netPayable || 0),
+            newNet: Number(newEntry.netPayable || 0),
+            netDiff,
+            oldLoan: Number(oldEntry.loanDeduction || 0),
+            newLoan: Number(newEntry.loanDeduction || 0),
+            loanDiff,
+            deductionsDiff
+          })
+        }
+      }
+    }
 
     return {
       preview: true,
       runId: run.id,
       runNumber: run.runNumber || run.id,
       periodCode: run.period,
-      currentTotals: { gross: currentGross, net: currentNet, headcount: currentHeadcount },
-      newTotals: { gross: currentGross, net: currentNet, headcount: currentHeadcount },
-      diff: { gross: 0, net: 0, headcount: 0 },
+      currentTotals: { gross: currentGross, net: currentNet, deductions: currentDeductions, loans: currentLoans, headcount: currentHeadcount },
+      newTotals: { gross: newGross, net: newNet, deductions: newDeductions, loans: newLoans, headcount: newHeadcount },
+      diff: {
+        gross: newGross - currentGross,
+        net: newNet - currentNet,
+        deductions: newDeductions - currentDeductions,
+        loans: newLoans - currentLoans,
+        headcount: newHeadcount - currentHeadcount
+      },
       hasIndividualApprovals: approvedEntries.length > 0,
       approvedEntriesCount: approvedEntries.length,
       added: [],
       removed: [],
-      updated: []
+      updated
     }
   }
 
@@ -663,21 +704,8 @@ class PayrollService {
             Number(item.specialAllowance || 0) > 0 ? { name: 'Special Allowance', amount: Number(item.specialAllowance) } : null,
           ].filter(Boolean)
 
-    // Loan deduction recovery: check item property or active disbursed loan for employee
-    let loanDeduction = Number(item.loanDeduction ?? item.loanDeductions ?? item.loanRecovery ?? 0)
-    if (loanDeduction === 0) {
-      const empId = item.employeeId || item.employeeCode || item.employee?.id
-      if (empId) {
-        try {
-          const loanInfo = loanService.getActiveDeductionForEmployee(empId, run.period || run.runNumber)
-          if (loanInfo && Number(loanInfo.totalDeduction) > 0) {
-            loanDeduction = Number(loanInfo.totalDeduction)
-          }
-        } catch {
-          // ignore lookup error
-        }
-      }
-    }
+    // Loan deduction recovery: strictly take from snapshot entry
+    const loanDeduction = Number(item.loanDeduction ?? item.loanDeductions ?? item.loanRecovery ?? 0)
 
     const basicSalary = Number(item.basicSalary ?? 0)
     const allowances = Number(item.allowancesTotal ?? item.allowances ?? 0)
@@ -690,10 +718,12 @@ class PayrollService {
     const unpaidLeaveDeduction = Number(item.unpaidAbsenceDeduction ?? item.unpaidLeaveDeduction ?? 0)
     const otherDeductions = Number(item.otherDeductions ?? 0)
     const calculatedDeductions = incomeTax + unpaidLeaveDeduction + loanDeduction + otherDeductions
-    const totalDeductions = (Number(item.totalDeductions) > 0 && Number(item.totalDeductions) >= calculatedDeductions)
+    const totalDeductions = item.totalDeductions !== undefined && item.totalDeductions !== null
       ? Number(item.totalDeductions)
       : calculatedDeductions
-    const netPayable = Math.max(0, grossSalary - totalDeductions)
+    const netPayable = item.netPayable !== undefined && item.netPayable !== null
+      ? Number(item.netPayable)
+      : (item.netSalary !== undefined && item.netSalary !== null ? Number(item.netSalary) : Math.max(0, grossSalary - totalDeductions))
 
     const approvedBy = isApproved
       ? (run.approvedBy || (run.approvedById ? 'Super Admin' : (run.approvedByName || 'Super Admin')))

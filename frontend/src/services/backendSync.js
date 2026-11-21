@@ -1083,10 +1083,21 @@ export async function syncPayroll() {
           (e) => e.employmentStatus && e.employmentStatus !== 'ACTIVE' && e.employmentStatus !== 'UNKNOWN'
         )
         const headcountMatches = recordedTotalEmployees === entryCount
+
+        const recordedLoan = r.totalLoanDeductions != null ? Number(r.totalLoanDeductions) : null
+        const recordedTax = r.totalTax != null ? Number(r.totalTax) : (r.totalTaxWithheld != null ? Number(r.totalTaxWithheld) : null)
+        const hasEntryMismatch = employeeBreakdown.some(e => Math.abs(Math.max(0, e.grossSalary - e.totalDeductions) - e.netPayable) > 0.01)
+
+        const loanMatches = recordedLoan == null || Math.abs(entriesLoan - recordedLoan) < 0.01
+        const taxMatches = recordedTax == null || Math.abs(entriesTax - recordedTax) < 0.01
+
         const totalsMatch =
+          !hasEntryMismatch &&
           Math.abs(entriesGross - grossPayroll) < 0.01 &&
           Math.abs(entriesNet - netPayable) < 0.01 &&
-          (r.totalDeductions == null || Math.abs(entriesDeductions - recordedDeductions) < 0.01)
+          (r.totalDeductions == null || Math.abs(entriesDeductions - recordedDeductions) < 0.01) &&
+          loanMatches &&
+          taxMatches
 
         const serverIssues = Array.isArray(r.reconciliationIssues) ? r.reconciliationIssues : []
         const reconciliationIssues = [...serverIssues]
@@ -1096,8 +1107,8 @@ export async function syncPayroll() {
         if (!headcountMatches && !reconciliationIssues.some((i) => i.includes('Headcount'))) {
           reconciliationIssues.push(`Headcount mismatch (recorded ${recordedTotalEmployees}, entries ${entryCount}).`)
         }
-        if (!totalsMatch && !reconciliationIssues.some((i) => i.includes('totals') || i.includes('Totals'))) {
-          reconciliationIssues.push('Summary totals do not match employee entries.')
+        if (!totalsMatch && !reconciliationIssues.some((i) => i.includes('totals') || i.includes('Totals') || i.includes('mismatch'))) {
+          reconciliationIssues.push('Financial mismatch: Summary totals do not match employee entries.')
         }
         if (inactiveEmployees.length > 0 && !reconciliationIssues.some((i) => i.includes('non-ACTIVE') || i.includes('ineligible'))) {
           reconciliationIssues.push(

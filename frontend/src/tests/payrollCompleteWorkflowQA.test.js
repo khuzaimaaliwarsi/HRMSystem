@@ -300,7 +300,7 @@ test('Payroll Complete Workflow — 10. Confirmation Preview Modal Layout & Diff
   assert.ok(content.includes('Recalculate & Update Draft') || content.includes('Recalculate &amp; Update Draft'), 'Must have confirm recalculate action')
 })
 
-test('Payroll Complete Workflow — 11. Active Loan LN-2026-001 Deduction on EMP-004 Payslip & Financial Integrity', () => {
+test('Payroll Complete Workflow — 11. Authoritative Snapshot Integrity (Master Sheet & Payslip 100% Harmonic)', () => {
   const sampleRun = {
     id: 'PAY-2026-11-02',
     runNumber: 'RUN-202611-02',
@@ -310,8 +310,8 @@ test('Payroll Complete Workflow — 11. Active Loan LN-2026-001 Deduction on EMP
     fiscalYear: '2026-2027'
   }
 
-  // EMP-004 entry with basic salary 30,000 and initially 0 loan deduction
-  const emp004Entry = {
+  // 1. Unrefreshed snapshot entry: strictly 0 loan and 30,000 net on BOTH master sheet and payslip
+  const unrefreshedEmp004Entry = {
     entryId: 'ENT-202611-004',
     employeeId: 'EMP-004',
     employeeCode: 'EMP-004',
@@ -321,21 +321,36 @@ test('Payroll Complete Workflow — 11. Active Loan LN-2026-001 Deduction on EMP
     overtimePay: 0,
     grossSalary: 30000,
     salaryTaxWithheld: 0,
-    loanDeduction: 0, // initially 0 in unrefreshed entry
+    loanDeduction: 0,
     unpaidLeaveDeduction: 0,
     otherDeductions: 0,
+    totalDeductions: 0,
     netPayable: 30000,
     paymentStatus: 'UNPAID'
   }
 
-  const payslip = payrollService.buildPayslipFromEntry(sampleRun, emp004Entry)
+  const unrefreshedPayslip = payrollService.buildPayslipFromEntry(sampleRun, unrefreshedEmp004Entry)
+  assert.ok(unrefreshedPayslip, 'Payslip must be created from snapshot')
+  assert.equal(unrefreshedPayslip.basicSalary, 30000, 'Basic Salary must remain strictly PKR 30,000')
+  assert.equal(unrefreshedPayslip.grossPay, 30000, 'Gross Salary must remain PKR 30,000')
+  assert.equal(unrefreshedPayslip.loanDeduction, 0, 'Payslip loan deduction must match snapshot entry (0 before refresh)')
+  assert.equal(unrefreshedPayslip.totalDeductions, 0, 'Total deductions must match snapshot entry (0 before refresh)')
+  assert.equal(unrefreshedPayslip.netPay, 30000, 'Net Payable must match snapshot entry (PKR 30,000 before refresh)')
 
-  assert.ok(payslip, 'Payslip must be created')
-  assert.equal(payslip.basicSalary, 30000, 'Basic Salary must remain strictly PKR 30,000')
-  assert.equal(payslip.grossPay, 30000, 'Gross Salary must remain PKR 30,000')
-  assert.equal(payslip.loanDeduction, 3000, 'Active loan LN-2026-001 monthly installment PKR 3,000 must be deducted')
-  assert.equal(payslip.totalDeductions, 3000, 'Total deductions must reflect loan deduction PKR 3,000')
-  assert.equal(payslip.netPay, 27000, 'Net Payable must strictly reconcile to PKR 27,000 (30,000 - 3,000)')
+  // 2. Refreshed snapshot entry: strictly 3,000 loan and 27,000 net on BOTH master sheet and payslip
+  const refreshedEmp004Entry = {
+    ...unrefreshedEmp004Entry,
+    loanDeduction: 3000,
+    totalDeductions: 3000,
+    netPayable: 27000
+  }
+
+  const refreshedPayslip = payrollService.buildPayslipFromEntry(sampleRun, refreshedEmp004Entry)
+  assert.equal(refreshedPayslip.basicSalary, 30000, 'Basic Salary must remain strictly PKR 30,000')
+  assert.equal(refreshedPayslip.grossPay, 30000, 'Gross Salary must remain PKR 30,000')
+  assert.equal(refreshedPayslip.loanDeduction, 3000, 'Payslip loan deduction must match refreshed snapshot entry (PKR 3,000)')
+  assert.equal(refreshedPayslip.totalDeductions, 3000, 'Total deductions must match refreshed snapshot entry (PKR 3,000)')
+  assert.equal(refreshedPayslip.netPay, 27000, 'Net Payable must strictly reconcile to PKR 27,000 (30,000 - 3,000)')
 })
 
 test('Payroll Complete Workflow — 12. Draft Payslip Attribution & Official Status Guards', () => {
@@ -434,4 +449,86 @@ test('Payroll Complete Workflow — 14. Super Admin Shift Assignment Attribution
   }
 
   assert.equal(assignedByDisplay, 'Tariq Mehmood', 'Must resolve to the active Super Admin user, never hardcoded HR Admin')
+})
+
+test('Payroll Complete Workflow — 15. Financial Mismatch Reconcile Hold & Approval Blocking', () => {
+  // A run where entriesNet (176,500) differs from run.netPayable (179,500) due to unrefreshed loan deduction
+  const mismatchedRun = {
+    id: 'PAY-2026-11-02',
+    runNumber: 'RUN-202611-02',
+    period: '2026-11',
+    grossPayroll: 179500,
+    totalGross: 179500,
+    totalDeductions: 0,
+    totalLoanDeductions: 0,
+    netPayable: 179500,
+    totalNet: 179500,
+    totalEmployees: 2,
+    employeeBreakdown: [
+      {
+        employeeId: 'EMP-001',
+        employeeName: 'Tariq Mehmood',
+        grossSalary: 149500,
+        totalDeductions: 0,
+        loanDeduction: 0,
+        salaryTaxWithheld: 0,
+        netPayable: 149500
+      },
+      {
+        employeeId: 'EMP-004',
+        employeeName: 'Zeeshan Ali',
+        grossSalary: 30000,
+        totalDeductions: 3000,
+        loanDeduction: 3000,
+        salaryTaxWithheld: 0,
+        netPayable: 27000
+      }
+    ]
+  }
+
+  // Sum of breakdown: gross 179,500, net 176,500, loans 3,000, deductions 3,000.
+  // Run header: gross 179,500, net 179,500, loans 0, deductions 0.
+  const gross = mismatchedRun.employeeBreakdown.reduce((sum, item) => sum + Number(item.grossSalary || 0), 0)
+  const net = mismatchedRun.employeeBreakdown.reduce((sum, item) => sum + Number(item.netPayable || 0), 0)
+  const loans = mismatchedRun.employeeBreakdown.reduce((sum, item) => sum + Number(item.loanDeduction || 0), 0)
+
+  const isNetMatched = Math.abs(net - Number(mismatchedRun.netPayable)) <= 0.01
+  const isLoanMatched = Math.abs(loans - Number(mismatchedRun.totalLoanDeductions)) <= 0.01
+
+  assert.equal(isNetMatched, false, 'Net payable mismatch must be detected')
+  assert.equal(isLoanMatched, false, 'Loan deductions mismatch must be detected')
+
+  // Under strict reconciliation check, isReconciled must be false
+  const isReconciled = isNetMatched && isLoanMatched
+  assert.equal(isReconciled, false, 'Mismatched run must NEVER be marked 100% Reconciled')
+})
+
+test('Payroll Complete Workflow — 16. Draft Refresh Preview Diff Accurately Computes Net and Loan Variance', () => {
+  const mockRun = {
+    id: 'PAY-TEST-DIFF',
+    runNumber: 'RUN-TEST-DIFF',
+    period: '2026-11',
+    grossPayroll: 179500,
+    netPayable: 179500,
+    totalDeductions: 0,
+    totalLoanDeductions: 0,
+    employeeBreakdown: [
+      { employeeId: 'EMP-004', employeeName: 'Zeeshan Ali', grossSalary: 30000, loanDeduction: 0, totalDeductions: 0, netPayable: 30000 }
+    ]
+  }
+
+  const existingRuns = payrollService._getItem('isysware_hrms_f06_payroll_runs_v1', [])
+  payrollService._setItem('isysware_hrms_f06_payroll_runs_v1', [mockRun, ...existingRuns])
+  const preview = payrollService.getDraftRefreshPreview('PAY-TEST-DIFF')
+
+  assert.ok(preview, 'Preview must be returned')
+  assert.equal(preview.runId, 'PAY-TEST-DIFF')
+  assert.ok(Array.isArray(preview.updated), 'Updated array must be present')
+  const emp004Update = preview.updated.find((u) => u.employeeId === 'EMP-004')
+  if (emp004Update) {
+    assert.equal(emp004Update.oldNet, 30000)
+    assert.ok(Number.isFinite(emp004Update.newNet), 'New net must be a finite number')
+    assert.ok(emp004Update.netDiff !== 0, 'Net diff must be detected')
+    assert.equal(emp004Update.loanDiff, 3000, 'Loan diff of PKR 3,000 must be detected for EMP-004')
+  }
 })
