@@ -545,38 +545,6 @@ export default function SuperAdminPayrollPage() {
         )}
       </div>
 
-      {/* Horizontal Submodule Tabs Navigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setActiveTab(tab.id);
-                setSearchParams({ tab: tab.id });
-              }}
-              className={`px-3 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-navy-950 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-white border border-slate-200'
-              }`}
-            >
-              <i className={`fa-solid ${tab.icon}`}></i>
-              <span>{tab.label}</span>
-              {typeof tab.badge === 'number' && tab.badge > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  isActive ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'
-                }`}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {actionMessage && (
         <div
           className={`p-3 text-xs rounded-lg border flex items-center justify-between ${actionMessage.type === 'success'
