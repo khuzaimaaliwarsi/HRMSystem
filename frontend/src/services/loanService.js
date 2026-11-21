@@ -305,10 +305,43 @@ class LoanService {
 
   /**
    * Get active loan deduction for an employee in a given period
+   * Enforces strict loan eligibility:
+   * - Only ACTIVE / DISBURSED loans qualify.
+   * - Strictly excludes PENDING, REJECTED, CANCELLED, REPAID, or CLOSED loans.
+   * - Verifies due date and disbursement date against requested period.
+   * - Guards against duplicate deduction within the same month.
    */
   getActiveDeductionForEmployee(employeeId, period) {
     const list = this._getItem(STORAGE_KEY, INITIAL_LOANS)
-    const activeLoans = list.filter((l) => (l.employeeId === employeeId || l.employeeCode === employeeId || l.employeeCuid === employeeId) && (l.status === 'Active' || l.status === 'DISBURSED') && l.outstandingBalance > 0)
+    const normPeriod = period ? String(period).slice(0, 7) : null
+
+    const activeLoans = list.filter((l) => {
+      const matchEmp = (l.employeeId === employeeId || l.employeeCode === employeeId || l.employeeCuid === employeeId)
+      if (!matchEmp) return false
+
+      const stat = String(l.status || '').toUpperCase()
+      if (stat !== 'ACTIVE' && stat !== 'DISBURSED') return false
+
+      if (Number(l.outstandingBalance || 0) <= 0) return false
+
+      if (normPeriod) {
+        const disbDate = (l.disbursedDate || l.disbursementDate) ? String(l.disbursedDate || l.disbursementDate).slice(0, 7) : null
+        if (disbDate && disbDate > normPeriod) return false
+
+        const nextPeriod = l.nextDeductionPeriod ? String(l.nextDeductionPeriod).slice(0, 7) : null
+        if (nextPeriod && nextPeriod > normPeriod) return false
+
+        // Guard against duplicate deduction in the same payroll period
+        if (Array.isArray(l.repayments) && l.repayments.some((r) => {
+          const rPeriod = r.period ? String(r.period).slice(0, 7) : (r.repaymentDate ? String(r.repaymentDate).slice(0, 7) : null)
+          return rPeriod === normPeriod
+        })) {
+          return false
+        }
+      }
+
+      return true
+    })
     
     let totalDeduction = 0
     const loanDeductions = []

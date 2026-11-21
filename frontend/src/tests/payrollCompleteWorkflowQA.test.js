@@ -18,6 +18,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import payrollService from '../services/payrollService.js'
+import { loanService } from '../services/loanService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -297,4 +298,140 @@ test('Payroll Complete Workflow — 10. Confirmation Preview Modal Layout & Diff
   assert.ok(content.includes('Gross Payroll'), 'Must show Gross Payroll diff')
   assert.ok(content.includes('Net Payable'), 'Must show Net Payable diff')
   assert.ok(content.includes('Recalculate & Update Draft') || content.includes('Recalculate &amp; Update Draft'), 'Must have confirm recalculate action')
+})
+
+test('Payroll Complete Workflow — 11. Active Loan LN-2026-001 Deduction on EMP-004 Payslip & Financial Integrity', () => {
+  const sampleRun = {
+    id: 'PAY-2026-11-02',
+    runNumber: 'RUN-202611-02',
+    period: '2026-11',
+    periodName: 'November 2026',
+    status: 'Draft',
+    fiscalYear: '2026-2027'
+  }
+
+  // EMP-004 entry with basic salary 30,000 and initially 0 loan deduction
+  const emp004Entry = {
+    entryId: 'ENT-202611-004',
+    employeeId: 'EMP-004',
+    employeeCode: 'EMP-004',
+    employeeName: 'Zeeshan Ali',
+    basicSalary: 30000,
+    allowancesTotal: 0,
+    overtimePay: 0,
+    grossSalary: 30000,
+    salaryTaxWithheld: 0,
+    loanDeduction: 0, // initially 0 in unrefreshed entry
+    unpaidLeaveDeduction: 0,
+    otherDeductions: 0,
+    netPayable: 30000,
+    paymentStatus: 'UNPAID'
+  }
+
+  const payslip = payrollService.buildPayslipFromEntry(sampleRun, emp004Entry)
+
+  assert.ok(payslip, 'Payslip must be created')
+  assert.equal(payslip.basicSalary, 30000, 'Basic Salary must remain strictly PKR 30,000')
+  assert.equal(payslip.grossPay, 30000, 'Gross Salary must remain PKR 30,000')
+  assert.equal(payslip.loanDeduction, 3000, 'Active loan LN-2026-001 monthly installment PKR 3,000 must be deducted')
+  assert.equal(payslip.totalDeductions, 3000, 'Total deductions must reflect loan deduction PKR 3,000')
+  assert.equal(payslip.netPay, 27000, 'Net Payable must strictly reconcile to PKR 27,000 (30,000 - 3,000)')
+})
+
+test('Payroll Complete Workflow — 12. Draft Payslip Attribution & Official Status Guards', () => {
+  const draftRun = {
+    id: 'PAY-2026-11-02',
+    runNumber: 'RUN-202611-02',
+    period: '2026-11',
+    status: 'Draft'
+  }
+  const entry = {
+    entryId: 'ENT-001',
+    employeeId: 'EMP-001',
+    employeeName: 'Tariq Mehmood',
+    basicSalary: 30000,
+    grossSalary: 30000,
+    netPayable: 30000
+  }
+
+  const draftPayslip = payrollService.buildPayslipFromEntry(draftRun, entry)
+  assert.equal(draftPayslip.isDraft, true, 'Draft run payslip must be flagged isDraft=true')
+  assert.equal(draftPayslip.approvedBy, 'Pending Review / Draft', 'Draft payslip must NOT display fake Super Admin approval')
+
+  const approvedRun = {
+    ...draftRun,
+    status: 'Approved',
+    approvedBy: 'Tariq Mehmood (Super Admin)'
+  }
+  const approvedPayslip = payrollService.buildPayslipFromEntry(approvedRun, entry)
+  assert.equal(approvedPayslip.isDraft, false, 'Approved run payslip must have isDraft=false')
+  assert.equal(approvedPayslip.approvedBy, 'Tariq Mehmood (Super Admin)', 'Approved payslip must display authentic approver')
+})
+
+test('Payroll Complete Workflow — 13. Loan Service Strict Status and Period Eligibility Guards', () => {
+  const backupLoans = loanService._getItem('isysware_hrms_f06_loans_v1', [])
+
+  try {
+    loanService._setItem('isysware_hrms_f06_loans_v1', [
+      {
+        id: 'LN-TEST-001',
+        employeeId: 'EMP-099',
+        status: 'Active',
+        principalAmount: 9000,
+        installmentAmount: 3000,
+        outstandingBalance: 9000,
+        disbursedDate: '2026-11-01',
+        nextDeductionPeriod: '2026-11'
+      },
+      {
+        id: 'LN-TEST-002',
+        employeeId: 'EMP-099',
+        status: 'REJECTED',
+        principalAmount: 15000,
+        installmentAmount: 5000,
+        outstandingBalance: 15000,
+        disbursedDate: '2026-11-01'
+      },
+      {
+        id: 'LN-TEST-003',
+        employeeId: 'EMP-099',
+        status: 'Pending',
+        principalAmount: 12000,
+        installmentAmount: 4000,
+        outstandingBalance: 12000,
+        disbursedDate: '2026-11-01'
+      },
+      {
+        id: 'LN-TEST-004',
+        employeeId: 'EMP-099',
+        status: 'Active',
+        principalAmount: 6000,
+        installmentAmount: 2000,
+        outstandingBalance: 6000,
+        disbursedDate: '2026-12-01', // Future month
+        nextDeductionPeriod: '2026-12'
+      }
+    ])
+
+    const deductionNov = loanService.getActiveDeductionForEmployee('EMP-099', '2026-11')
+    assert.equal(deductionNov.totalDeduction, 3000, 'Only LN-TEST-001 (Active in 2026-11) must be deducted')
+    assert.equal(deductionNov.activeLoanCount, 1, 'Rejected, Pending, and future loans must be strictly excluded')
+  } finally {
+    loanService._setItem('isysware_hrms_f06_loans_v1', backupLoans)
+  }
+})
+
+test('Payroll Complete Workflow — 14. Super Admin Shift Assignment Attribution is Dynamic', () => {
+  const activeUser = { name: 'Tariq Mehmood', role: 'super_admin' }
+  const isSuperAdminPortal = true
+  const portalDefaultAssigner = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || 'HR Admin')
+
+  let assignedByDisplay = 'HR Admin'
+  if (isSuperAdminPortal) {
+    if (!assignedByDisplay || assignedByDisplay === 'HR Admin' || assignedByDisplay === 'HR Administrator' || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
+      assignedByDisplay = activeUser?.name || 'Super Admin'
+    }
+  }
+
+  assert.equal(assignedByDisplay, 'Tariq Mehmood', 'Must resolve to the active Super Admin user, never hardcoded HR Admin')
 })

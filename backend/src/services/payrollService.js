@@ -835,7 +835,12 @@ export const payrollService = {
       prisma.employeeLoan.findMany({
         where: {
           status: 'DISBURSED',
-          remainingBalance: { gt: 0 }
+          remainingBalance: { gt: 0 },
+          disbursementDate: { lte: endDate }
+        },
+        include: {
+          employee: true,
+          repayments: true
         }
       })
     ])
@@ -868,10 +873,18 @@ export const payrollService = {
       overtimeByEmp.set(ot.employeeId, current + ot.durationMinutes)
     }
 
-    // Loans grouped by employee
+    // Loans grouped by employee (preventing duplicate deductions if already repaid in period)
     const loansByEmp = new Map()
     for (const loan of activeLoans) {
-      loansByEmp.set(loan.employeeId, loan)
+      const alreadyRepaidInPeriod = Array.isArray(loan.repayments) && loan.repayments.some((r) => {
+        const rDate = new Date(r.repaymentDate || r.createdAt)
+        return rDate >= startDate && rDate <= endDate
+      })
+      if (!alreadyRepaidInPeriod) {
+        if (loan.employeeId) loansByEmp.set(loan.employeeId, loan)
+        if (loan.employee?.id) loansByEmp.set(loan.employee.id, loan)
+        if (loan.employee?.employeeCode) loansByEmp.set(loan.employee.employeeCode, loan)
+      }
     }
 
     const taxConfig = await payrollTaxService.getTaxConfig()
@@ -937,7 +950,7 @@ export const payrollService = {
       const taxDeduction = taxCalc.taxDeduction
 
       let loanDeduction = 0
-      const activeLoan = loansByEmp.get(emp.id)
+      const activeLoan = loansByEmp.get(emp.id) || (emp.employeeCode ? loansByEmp.get(emp.employeeCode) : null)
       if (activeLoan) {
         loanDeduction = Math.min(Number(activeLoan.monthlyInstallment), Number(activeLoan.remainingBalance))
       }

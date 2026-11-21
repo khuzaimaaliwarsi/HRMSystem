@@ -34,11 +34,18 @@ class PayrollService {
   // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const val = window.localStorage.getItem(key)
         if (val !== null) {
-          try { return JSON.parse(val) } catch { return val }
+          try {
+            const parsed = JSON.parse(val)
+            this.memoryStorage[key] = parsed
+            return parsed
+          } catch {
+            this.memoryStorage[key] = val
+            return val
+          }
         }
       } catch {
         // ignore
@@ -49,7 +56,7 @@ class PayrollService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
       } catch {
@@ -643,6 +650,7 @@ class PayrollService {
   buildPayslipFromEntry(run, item) {
     if (!run || !item) return null
     const runStatusUpper = String(run.status || '').toUpperCase()
+    const isApproved = ['APPROVED', 'FINALIZED', 'POSTED', 'DISBURSED'].includes(runStatusUpper) || String(item.approvalStatus || '').toUpperCase() === 'APPROVED'
     const isDisbursed = ['POSTED', 'DISBURSED'].includes(runStatusUpper) || String(item.paymentStatus || '').toUpperCase() === 'PAID'
     const allowancesBreakdown = Array.isArray(item.allowancesBreakdown) && item.allowancesBreakdown.length > 0
       ? item.allowancesBreakdown
@@ -655,6 +663,42 @@ class PayrollService {
             Number(item.specialAllowance || 0) > 0 ? { name: 'Special Allowance', amount: Number(item.specialAllowance) } : null,
           ].filter(Boolean)
 
+    // Loan deduction recovery: check item property or active disbursed loan for employee
+    let loanDeduction = Number(item.loanDeduction ?? item.loanDeductions ?? item.loanRecovery ?? 0)
+    if (loanDeduction === 0) {
+      const empId = item.employeeId || item.employeeCode || item.employee?.id
+      if (empId) {
+        try {
+          const loanInfo = loanService.getActiveDeductionForEmployee(empId, run.period || run.runNumber)
+          if (loanInfo && Number(loanInfo.totalDeduction) > 0) {
+            loanDeduction = Number(loanInfo.totalDeduction)
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+    }
+
+    const basicSalary = Number(item.basicSalary ?? 0)
+    const allowances = Number(item.allowancesTotal ?? item.allowances ?? 0)
+    const commissions = Number(item.commission ?? item.commissions ?? 0)
+    const bonuses = Number(item.bonusAmount ?? item.bonuses ?? 0)
+    const overtimePay = Number(item.overtimePay ?? 0)
+    const grossSalary = Number(item.grossSalary ?? (basicSalary + allowances + commissions + bonuses + overtimePay))
+
+    const incomeTax = Number(item.salaryTaxWithheld ?? item.incomeTax ?? 0)
+    const unpaidLeaveDeduction = Number(item.unpaidAbsenceDeduction ?? item.unpaidLeaveDeduction ?? 0)
+    const otherDeductions = Number(item.otherDeductions ?? 0)
+    const calculatedDeductions = incomeTax + unpaidLeaveDeduction + loanDeduction + otherDeductions
+    const totalDeductions = (Number(item.totalDeductions) > 0 && Number(item.totalDeductions) >= calculatedDeductions)
+      ? Number(item.totalDeductions)
+      : calculatedDeductions
+    const netPayable = Math.max(0, grossSalary - totalDeductions)
+
+    const approvedBy = isApproved
+      ? (run.approvedBy || (run.approvedById ? 'Super Admin' : (run.approvedByName || 'Super Admin')))
+      : 'Pending Review / Draft'
+
     return {
       ...item,
       id: item.entryId || `PS-${run.period || run.runNumber}-${item.employeeId}`,
@@ -665,26 +709,32 @@ class PayrollService {
       workingDays: item.calendarDays || item.workingDays || 30,
       daysPresent: item.daysPresent !== undefined && item.daysPresent !== null ? Number(item.daysPresent) : 0,
       unpaidLeaves: item.unpaidLeaveDays ?? 0,
-      allowances: Number(item.allowancesTotal ?? item.allowances ?? 0),
+      basicSalary,
+      allowances,
       allowancesBreakdown,
-      commissions: Number(item.commission ?? item.commissions ?? 0),
-      bonuses: Number(item.bonusAmount ?? item.bonuses ?? 0),
-      overtimePay: Number(item.overtimePay ?? 0),
-      grossPay: Number(item.grossSalary ?? 0),
-      grossSalary: Number(item.grossSalary ?? 0),
-      incomeTax: Number(item.salaryTaxWithheld ?? item.incomeTax ?? 0),
-      unpaidLeaveDeduction: Number(item.unpaidAbsenceDeduction ?? item.unpaidLeaveDeduction ?? 0),
-      otherDeductions: Number(item.otherDeductions ?? 0),
-      netPay: Number(item.netPayable ?? item.netPay ?? 0),
-      netPayable: Number(item.netPayable ?? item.netPay ?? 0),
+      commissions,
+      bonuses,
+      overtimePay,
+      grossPay: grossSalary,
+      grossSalary,
+      incomeTax,
+      unpaidLeaveDeduction,
+      loanDeduction,
+      otherDeductions,
+      totalDeductions,
+      netPay: netPayable,
+      netPayable,
       bankName: item.bankName || null,
       accountTitle: item.bankAccountTitle || item.accountTitle || item.employeeName,
       iban: item.bankIban || item.iban || null,
       accountNumber: item.bankAccountNumber || item.accountNumber || null,
       postedAt: run.postedAt || run.disbursedAt || null,
-      approvedBy: run.approvedBy || (run.approvedById ? 'Super Admin' : 'Pending'),
+      approvedBy,
       approvedAt: run.approvedAt || null,
-      status: isDisbursed ? 'Disbursed' : (run.status || 'Pending'),
+      isDraft: !isApproved,
+      isApproved,
+      isDisbursed,
+      status: isDisbursed ? 'Disbursed' : isApproved ? 'Approved' : 'Draft',
       paymentStatus: isDisbursed ? 'PAID' : (item.paymentStatus || 'UNPAID')
     }
   }

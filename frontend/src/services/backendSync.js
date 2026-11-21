@@ -1136,7 +1136,8 @@ export async function syncPayroll() {
         }
       })
 
-      payrollService.memoryStorage['isysware_hrms_f06_payroll_runs_v1'] = mappedRuns
+      payrollService._setItem('isysware_hrms_f06_payroll_runs_v1', mappedRuns)
+      payrollService._notify()
     }
 
     const rawPayslips = payslipsRes.status === 'fulfilled' ? unwrapArray(payslipsRes.value) : null
@@ -1807,7 +1808,7 @@ export async function syncAllModules() {
           effectiveFrom: a.effectiveFrom?.slice(0, 10),
           effectiveTo: a.effectiveUntil?.slice(0, 10) || null,
           status: a.status,
-          assignedBy: a.assignedById
+          assignedBy: a.assignedByName || a.assignedBy || 'Super Admin'
         }))
 
       shiftService._notify()

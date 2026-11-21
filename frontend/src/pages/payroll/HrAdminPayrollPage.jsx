@@ -253,6 +253,21 @@ export default function HrAdminPayrollPage() {
     }
   };
 
+  const latestActiveRun = payrollRuns.find((r) => String(r.status || '').toUpperCase() !== 'VOID') || null;
+  const selectedRunForPeriod = useMemo(() => {
+    if (!breakdownPeriod) return latestActiveRun;
+    return payrollRuns.find((r) =>
+      String(r.status || '').toUpperCase() !== 'VOID' && (
+        r.period === breakdownPeriod ||
+        r.runNumber === breakdownPeriod ||
+        r.id === breakdownPeriod ||
+        r.payrollPeriod?.periodCode === breakdownPeriod ||
+        r.periodName?.toLowerCase() === breakdownPeriod.toLowerCase() ||
+        (r.period && r.period.includes(breakdownPeriod))
+      )
+    ) || latestActiveRun;
+  }, [breakdownPeriod, payrollRuns, latestActiveRun]);
+
   const tabs = [
     { id: 'runs', label: 'Payroll Operations & Runs', icon: 'fa-money-check-dollar' },
     { id: 'structures', label: 'Salary Structures', icon: 'fa-file-invoice' },
@@ -339,7 +354,15 @@ export default function HrAdminPayrollPage() {
       )}
 
       {/* KPI Cards */}
-      {activeTab === 'runs' && <PayrollSummaryCards payrollRuns={payrollRuns} />}
+      {activeTab === 'runs' && <PayrollSummaryCards
+        payrollRuns={payrollRuns}
+        selectedPeriod={breakdownPeriod}
+        grossPayroll={selectedRunForPeriod?.grossPayroll}
+        netPayable={selectedRunForPeriod?.netPayable}
+        taxWithheld={selectedRunForPeriod?.totalTaxWithheld}
+        loanDeductions={selectedRunForPeriod?.totalLoanDeductions}
+        periodName={selectedRunForPeriod?.periodName}
+      />}
 
       {/* Submodule Screen (One Submodule = One Functional Screen) */}
       <div className="bg-slate-50/50 rounded-xl min-h-[400px]">

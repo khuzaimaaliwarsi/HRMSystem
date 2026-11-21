@@ -58,6 +58,12 @@ export default function PayslipModal({ payslip, isOpen, onClose }) {
   };
 
   const amountInWords = numberToWords(payslip.netPay);
+  const statusUpper = String(payslip.status || payslip.paymentStatus || '').toUpperCase();
+  const runStatusUpper = String(payslip.runStatus || '').toUpperCase();
+  const isApprovedRun = (['APPROVED', 'FINALIZED', 'POSTED', 'DISBURSED'].includes(statusUpper) ||
+                        ['APPROVED', 'FINALIZED', 'POSTED', 'DISBURSED'].includes(runStatusUpper) ||
+                        Boolean(payslip.isApproved)) && !payslip.isDraft;
+  const isDraftRun = !isApprovedRun;
 
   const modalContent = (
     <div
@@ -72,7 +78,9 @@ export default function PayslipModal({ payslip, isOpen, onClose }) {
         <div className="shrink-0 px-3.5 py-2 bg-navy-950 text-white flex justify-between items-center print:hidden border-b border-navy-900">
           <div className="flex items-center gap-2 min-w-0">
             <AppIcon name="tax" className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-bold text-xs truncate">Official Salary Payslip — {payslip.period}</span>
+            <span className="font-bold text-xs truncate">
+              {isDraftRun ? 'Draft Salary Preview' : 'Official Salary Payslip'} — {payslip.period}
+            </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -103,8 +111,12 @@ export default function PayslipModal({ payslip, isOpen, onClose }) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-base font-black tracking-tight text-navy-950">iSysware HRMS</span>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-navy-100 text-navy-900 rounded">
-                  CONFIDENTIAL
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                  isDraftRun
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-navy-100 text-navy-900'
+                }`}>
+                  {isDraftRun ? 'DRAFT PAYSLIP — PENDING APPROVAL' : 'OFFICIAL PAYSLIP'}
                 </span>
               </div>
               <p className="text-[10.5px] text-slate-500 mt-0.5">Software Systems & Enterprise HR Platform</p>
@@ -342,9 +354,13 @@ export default function PayslipModal({ payslip, isOpen, onClose }) {
             </div>
             <div>
               <div className="border-b border-slate-300 pb-0.5 font-semibold text-slate-700">
-                Approved By: Super Admin Authority
+                {isDraftRun ? 'Approved By: Pending Review / Draft' : `Approved By: ${payslip.approvedBy || 'Super Admin Authority'}`}
               </div>
-              <p className="mt-0.5">Finalized & electronically authorized under Section 149.</p>
+              <p className="mt-0.5">
+                {isDraftRun
+                  ? 'Draft payroll run has not been authorized. Unofficial preview only.'
+                  : `Finalized & electronically authorized under Section 149${payslip.approvedAt ? ` on ${new Date(payslip.approvedAt).toLocaleDateString()}` : ''}.`}
+              </p>
             </div>
           </div>
 

@@ -7,17 +7,31 @@ export function PayrollSummaryCards({
   taxWithheld,
   loanDeductions,
   periodName,
+  selectedPeriod,
   payrollRuns = []
 }) {
   const activeRuns = Array.isArray(payrollRuns)
     ? payrollRuns.filter((r) => String(r?.status || '').toUpperCase() !== 'VOID')
     : []
-  const latestRun = activeRuns.length > 0 ? activeRuns[0] : null
-  const effectiveGross = grossPayroll !== undefined ? grossPayroll : (latestRun?.grossPayroll ?? 0)
-  const effectiveNet = netPayable !== undefined ? netPayable : (latestRun?.netPayable ?? 0)
-  const effectiveTax = taxWithheld !== undefined ? taxWithheld : (latestRun?.totalTaxWithheld ?? 0)
-  const effectiveLoan = loanDeductions !== undefined ? loanDeductions : (latestRun?.totalLoanDeductions ?? 0)
-  const effectivePeriod = periodName || latestRun?.periodName || latestRun?.period || (activeRuns.length === 0 ? 'No Active Run' : 'Current Run')
+  
+  const matchedRun = selectedPeriod && activeRuns.length > 0
+    ? activeRuns.find((r) =>
+        r.period === selectedPeriod ||
+        r.payrollPeriod?.periodCode === selectedPeriod ||
+        r.periodCode === selectedPeriod ||
+        r.runNumber === selectedPeriod ||
+        r.id === selectedPeriod ||
+        (r.periodName && r.periodName.toLowerCase() === selectedPeriod.toLowerCase()) ||
+        (r.period && selectedPeriod && r.period.includes(selectedPeriod))
+      )
+    : null
+
+  const targetRun = matchedRun || (activeRuns.length > 0 ? activeRuns[0] : null)
+  const effectiveGross = grossPayroll !== undefined ? grossPayroll : (targetRun?.grossPayroll ?? 0)
+  const effectiveNet = netPayable !== undefined ? netPayable : (targetRun?.netPayable ?? 0)
+  const effectiveTax = taxWithheld !== undefined ? taxWithheld : (targetRun?.totalTaxWithheld ?? 0)
+  const effectiveLoan = loanDeductions !== undefined ? loanDeductions : (targetRun?.totalLoanDeductions ?? 0)
+  const effectivePeriod = periodName || targetRun?.periodName || targetRun?.period || (activeRuns.length === 0 ? 'No Active Run' : 'Current Run')
 
   const cards = [
     {

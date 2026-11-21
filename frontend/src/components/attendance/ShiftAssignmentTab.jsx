@@ -20,8 +20,8 @@ export function ShiftAssignmentTab({
   const activeUser = currentUser || user
   const roleStr = String(activeUser?.role || activeUser?.portalRole || '').toLowerCase().replace(/[^a-z]/g, '')
   const isSuperAdminByRole = roleStr.includes('superadmin') || roleStr === 'admin' || activeUser?.username === 'superadmin' || activeUser?.role === 'super_admin'
-  const isSuperAdminByPath = typeof window !== 'undefined' && (window.location.pathname.startsWith('/super-admin') || window.location.pathname.startsWith('/admin'))
-  const isSuperAdminPortal = isSuperAdminByRole || isSuperAdminByPath
+  const isSuperAdminByPath = typeof window !== 'undefined' && (window.location.pathname.startsWith('/super-admin') || window.location.pathname.startsWith('/admin') || window.location.pathname.includes('super-admin'))
+  const isSuperAdminPortal = isSuperAdminByRole || isSuperAdminByPath || activeUser?.portalType === 'super_admin'
   const portalDefaultAssigner = isSuperAdminPortal ? (activeUser?.name || 'Super Admin') : (activeUser?.name || 'HR Admin')
 
   const [shiftFilter, setShiftFilter] = useState('all')
@@ -61,7 +61,7 @@ export function ShiftAssignmentTab({
     let assignedByDisplay = a.assignedByName || a.assignedBy
     if (isSuperAdminPortal) {
       if (!assignedByDisplay || assignedByDisplay === 'HR Admin' || assignedByDisplay === 'HR Administrator' || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {
-        assignedByDisplay = 'Super Admin'
+        assignedByDisplay = activeUser?.name || 'Super Admin'
       }
     } else {
       if (!assignedByDisplay || (typeof assignedByDisplay === 'string' && assignedByDisplay.startsWith('cmw'))) {

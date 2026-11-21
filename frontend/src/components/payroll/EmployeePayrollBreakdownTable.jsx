@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import StatusBadge from '@/components/common/StatusBadge'
+import { loanService } from '@/services/loanService'
 
 export function EmployeePayrollBreakdownTable({
   payrollRuns = [],
@@ -302,9 +303,23 @@ export function EmployeePayrollBreakdownTable({
               const overtime = Number(entry.overtimePay ?? entry.overtimeAmount ?? 0)
               const otHours = Number(entry.overtimeHours || 0)
               const tax = Number(entry.salaryTaxWithheld ?? entry.taxDeduction ?? 0)
-              const loan = Number(entry.loanDeduction ?? 0)
+              let loan = Number(entry.loanDeduction ?? 0)
+              if (loan === 0) {
+                try {
+                  const empCode = entry.employeeId || entry.employeeCode || entry.employeeCuid
+                  const activeLoanInfo = loanService.getActiveDeductionForEmployee(empCode, currentRun?.period || activePeriod)
+                  if (activeLoanInfo && Number(activeLoanInfo.totalDeduction) > 0) {
+                    loan = Number(activeLoanInfo.totalDeduction)
+                  }
+                } catch {
+                  // ignore
+                }
+              }
               const other = Number(entry.unpaidLeaveDeduction ?? entry.otherDeductions ?? 0)
-              const net = Number(entry.netPayable ?? entry.netSalary ?? 0)
+              const calculatedNet = (Number(entry.loanDeduction ?? 0) === 0 && loan > 0)
+                ? Math.max(0, (basic + allowances + overtime) - (tax + loan + other))
+                : Number(entry.netPayable ?? entry.netSalary ?? 0)
+              const net = calculatedNet
 
               const isEntryApproved = String(entry.approvalStatus || '').toUpperCase() === 'APPROVED'
               const isEntryRejected = String(entry.approvalStatus || '').toUpperCase() === 'REJECTED'

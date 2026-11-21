@@ -470,6 +470,19 @@ export default function SuperAdminPayrollPage() {
   ];
 
   const latestActiveRun = payrollRuns.find((r) => String(r.status || '').toUpperCase() !== 'VOID') || null;
+  const selectedRunForPeriod = useMemo(() => {
+    if (!breakdownPeriod) return latestActiveRun;
+    return payrollRuns.find((r) =>
+      String(r.status || '').toUpperCase() !== 'VOID' && (
+        r.period === breakdownPeriod ||
+        r.runNumber === breakdownPeriod ||
+        r.id === breakdownPeriod ||
+        r.payrollPeriod?.periodCode === breakdownPeriod ||
+        r.periodName?.toLowerCase() === breakdownPeriod.toLowerCase() ||
+        (r.period && r.period.includes(breakdownPeriod))
+      )
+    ) || latestActiveRun;
+  }, [breakdownPeriod, payrollRuns, latestActiveRun]);
 
   return (
     <div className="space-y-6">
@@ -552,11 +565,12 @@ export default function SuperAdminPayrollPage() {
       {/* KPI Cards */}
       {activeTab === 'runs' && <PayrollSummaryCards
         payrollRuns={payrollRuns}
-        grossPayroll={latestActiveRun?.grossPayroll}
-        netPayable={latestActiveRun?.netPayable}
-        taxWithheld={latestActiveRun?.totalTaxWithheld}
-        loanDeductions={latestActiveRun?.totalLoanDeductions}
-        periodName={latestActiveRun?.periodName}
+        selectedPeriod={breakdownPeriod}
+        grossPayroll={selectedRunForPeriod?.grossPayroll}
+        netPayable={selectedRunForPeriod?.netPayable}
+        taxWithheld={selectedRunForPeriod?.totalTaxWithheld}
+        loanDeductions={selectedRunForPeriod?.totalLoanDeductions}
+        periodName={selectedRunForPeriod?.periodName}
       />}
 
       {/* Submodule Screen (One Submodule = One Functional Screen) */}
