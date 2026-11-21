@@ -34,6 +34,55 @@ export function TimesheetsTab({
   const [feedback, setFeedback] = useState(null)
   const [decisionPending, setDecisionPending] = useState(false)
 
+  const matchedAttendance = useMemo(() => {
+    if (!selectedOvertime) return null
+    return (records || []).find((r) =>
+      (r.employeeId === selectedOvertime.employeeId || r.employeeCode === selectedOvertime.employeeId || r.employeeCuid === selectedOvertime.employeeId) &&
+      (r.date === selectedOvertime.overtimeDate || r.attendanceDate === selectedOvertime.overtimeDate)
+    ) || null
+  }, [selectedOvertime, records])
+
+  const hasVerifiedPunchEvidence = useMemo(() => {
+    if (!selectedOvertime) return false
+    // 1. Explicit backend verification flag with verified check-in/out
+    if (selectedOvertime.attendanceVerified === true && selectedOvertime.actualCheckIn && selectedOvertime.actualCheckOut) {
+      return true
+    }
+    // 2. Check matched attendance register record if present
+    if (matchedAttendance) {
+      const isAbsent = String(matchedAttendance.status || matchedAttendance.primaryClassification || '').toUpperCase() === 'ABSENT'
+      if (isAbsent) return false
+
+      const workHours = Number(matchedAttendance.totalWorkingHours ?? matchedAttendance.actualWorkHours ?? 0)
+      const workMins = Number(matchedAttendance.actualWorkMinutes ?? matchedAttendance.workedMinutes ?? (workHours * 60))
+      if (workMins <= 0) return false
+
+      const checkIn = matchedAttendance.firstCheckIn || matchedAttendance.checkIn
+      const checkOut = matchedAttendance.lastCheckOut || matchedAttendance.checkOut
+      if (!checkIn || !checkOut) return false
+
+      if (Array.isArray(matchedAttendance.punches) && matchedAttendance.punches.length > 0) {
+        const hasIn = matchedAttendance.punches.some((p) => p.punchType === 'CHECK_IN' && p.punchTime)
+        const hasOut = matchedAttendance.punches.some((p) => p.punchType === 'CHECK_OUT' && p.punchTime)
+        if (!hasIn || !hasOut) return false
+      }
+
+      return true
+    }
+    return false
+  }, [selectedOvertime, matchedAttendance])
+
+  const actualVerifiedWorkingHours = useMemo(() => {
+    if (!hasVerifiedPunchEvidence) return 0.0
+    if (matchedAttendance) {
+      const workHours = Number(matchedAttendance.totalWorkingHours ?? matchedAttendance.actualWorkHours ?? 0)
+      const workMins = Number(matchedAttendance.actualWorkMinutes ?? matchedAttendance.workedMinutes ?? (workHours * 60))
+      if (workMins > 0) return Math.round((workMins / 60) * 10) / 10
+    }
+    const otDuration = Number(selectedOvertime?.durationMinutes ?? selectedOvertime?.requestedMinutes ?? 0)
+    return otDuration > 0 ? Math.round((otDuration / 60) * 10) / 10 : 0.0
+  }, [hasVerifiedPunchEvidence, matchedAttendance, selectedOvertime])
+
   // Pending count for overtime
   const pendingOvertimeCount = useMemo(() => {
     return (overtimeRequests || []).filter(
@@ -99,6 +148,14 @@ export function TimesheetsTab({
 
   const handleApproveOvertime = async (ot) => {
     setFeedback(null)
+    const hasEvidence = Boolean(ot.attendanceVerified === true && ot.actualCheckIn && ot.actualCheckOut) || hasVerifiedPunchEvidence
+    if (!hasEvidence) {
+      setFeedback({
+        type: 'danger',
+        message: 'Overtime approval blocked: Genuine Check-In/Check-Out punch evidence is required. Claimed duration cannot be approved without verified attendance.'
+      })
+      return
+    }
     const requestedMins = Number(ot.durationMinutes ?? ot.requestedMinutes)
     if (!Number.isInteger(requestedMins) || requestedMins < 60) {
       setFeedback({ type: 'danger', message: 'Invalid overtime duration. A valid 60+ minute claim is required.' })
@@ -590,16 +647,20 @@ export function TimesheetsTab({
                   {selectedOvertime.startTime ? formatTimeTo12Hour(selectedOvertime.startTime) : '—'} – {selectedOvertime.endTime ? formatTimeTo12Hour(selectedOvertime.endTime) : '—'}
                 </span>
                 <span className="text-slate-500 text-[10px] uppercase font-bold block mt-2">Verified Punches</span>
-                <span className="font-bold text-slate-700 font-mono">
-                  {selectedOvertime.attendanceVerified === true && selectedOvertime.actualCheckIn && selectedOvertime.actualCheckOut
-                    ? `${formatTimeTo12Hour(selectedOvertime.actualCheckIn)} – ${formatTimeTo12Hour(selectedOvertime.actualCheckOut)}`
-                    : 'Not verified / no confirmed punch evidence'}
+                <span className={`font-mono text-[11px] font-bold ${hasVerifiedPunchEvidence ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {hasVerifiedPunchEvidence
+                    ? `${formatTimeTo12Hour(selectedOvertime.actualCheckIn || matchedAttendance?.firstCheckIn || matchedAttendance?.checkIn)} – ${formatTimeTo12Hour(selectedOvertime.actualCheckOut || matchedAttendance?.lastCheckOut || matchedAttendance?.checkOut)}`
+                    : 'Missing / No punch evidence (Attendance 0.0h)'}
                 </span>
               </div>
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-bold block">Claimed Duration</span>
-                <span className="font-bold text-hrms-primary font-mono text-sm">
-                  {Number(selectedOvertime.durationMinutes || selectedOvertime.requestedMinutes || 0)} mins ({Number.isFinite(Number(selectedOvertime.requestedHours)) && Number(selectedOvertime.requestedHours) > 0 ? Number(selectedOvertime.requestedHours) : Math.round((Number(selectedOvertime.durationMinutes || selectedOvertime.requestedMinutes || 0) / 60) * 10) / 10}h)
+                <span className="font-bold text-slate-800 font-mono text-sm">
+                  {Number(selectedOvertime.durationMinutes || selectedOvertime.requestedMinutes || 0)} mins ({Math.round((Number(selectedOvertime.durationMinutes || selectedOvertime.requestedMinutes || 0) / 60) * 10) / 10}h claimed)
+                </span>
+                <span className="text-slate-500 text-[10px] uppercase font-bold block mt-2">Actual Verified Hours</span>
+                <span className={`font-bold font-mono text-sm ${hasVerifiedPunchEvidence ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {actualVerifiedWorkingHours.toFixed(1)} hrs
                 </span>
               </div>
               <div>
@@ -636,7 +697,7 @@ export function TimesheetsTab({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-600 font-bold text-[11px] mb-1">
-                      Approved Duration (minutes):
+                      Claimed Duration (minutes):
                     </label>
                     <input
                       type="number"
@@ -644,19 +705,42 @@ export function TimesheetsTab({
                       max="360"
                       step="15"
                       readOnly
-                       value={approvedMinutesInput}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-bold"
+                      value={approvedMinutesInput}
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs font-mono font-bold text-slate-700"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-600 font-bold text-[11px] mb-1">
-                      Calculated Working Hours:
+                      Actual Verified Working Hours:
                     </label>
-                    <div className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono font-bold text-slate-700">
-                       {Math.round((Number(selectedOvertime.durationMinutes ?? selectedOvertime.requestedMinutes ?? 0) / 60) * 10) / 10} hrs
+                    <div className={`px-2.5 py-1.5 border rounded text-xs font-mono font-bold ${
+                      hasVerifiedPunchEvidence
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-rose-50 border-rose-300 text-rose-800'
+                    }`}>
+                      {hasVerifiedPunchEvidence
+                        ? `${actualVerifiedWorkingHours.toFixed(1)} hrs (Verified with punch session)`
+                        : '0.0 hrs (No verified punch session)'}
                     </div>
                   </div>
                 </div>
+
+                {!hasVerifiedPunchEvidence ? (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2 text-[11px] text-rose-900">
+                    <AppIcon name="alertTriangle" className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Overtime Approval Blocked:</span>
+                      <p className="mt-0.5 text-rose-800">
+                        Attendance record reflects 0.0h worked or lacks continuous Check-In / Check-Out punch evidence for this date. Claimed duration cannot be converted to approved worked hours without verified punches.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-emerald-800 font-medium flex items-center gap-1">
+                    <AppIcon name="checkCircle" className="w-3.5 h-3.5 text-emerald-600" />
+                    Attendance session verified with genuine Check-In/Check-Out punch evidence.
+                  </p>
+                )}
 
                 <div>
                   <label className="block text-slate-600 font-bold text-[11px] mb-1">
@@ -671,21 +755,29 @@ export function TimesheetsTab({
                   />
                 </div>
 
-                <p className="text-[11px] text-amber-800">Server-verified attendance is required for approval. Partial approval is disabled until supported by the backend.</p>
-                 <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200">
                   <button
                     type="button"
-                     onClick={() => handleRejectOvertime(selectedOvertime)}
-                     disabled={decisionPending}
+                    onClick={() => handleRejectOvertime(selectedOvertime)}
+                    disabled={decisionPending}
                     className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer"
                   >
                     Reject Overtime
                   </button>
                   <button
                     type="button"
-                     onClick={() => handleApproveOvertime(selectedOvertime)}
-                     disabled={decisionPending}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer"
+                    onClick={() => handleApproveOvertime(selectedOvertime)}
+                    disabled={decisionPending || !hasVerifiedPunchEvidence}
+                    className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition ${
+                      hasVerifiedPunchEvidence && !decisionPending
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-sm'
+                        : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed'
+                    }`}
+                    title={
+                      !hasVerifiedPunchEvidence
+                        ? 'Approval blocked: Genuine punch evidence (Check-In & Check-Out) is missing or unverified'
+                        : 'Approve Overtime'
+                    }
                   >
                     Approve Overtime
                   </button>

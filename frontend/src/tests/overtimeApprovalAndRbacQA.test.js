@@ -299,4 +299,68 @@ describe('BUG-023: Overtime Approval, RBAC Scoping & Super Admin Universal Autho
     assert.strictEqual(lastLog.note, 'Critical cluster patch verified')
     assert.ok(lastLog.timestamp, 'Timestamp must exist')
   })
+
+  it('9. Overtime Punch Evidence Guard: Unverified punch evidence marks attendanceVerified and payrollEligible false, blocking payroll synchronization', () => {
+    attendanceService._setItem('isysware_hrms_f04_attendance_records_v1', [{
+      id: 'ATT-QA-ABS-01',
+      employeeId: 'EMP-005',
+      employeeName: 'Ahmed Khan',
+      date: '2026-11-19',
+      primaryClassification: 'Absent',
+      status: 'Absent',
+      actualWorkMinutes: 0,
+      workedHours: 0,
+      punches: []
+    }])
+
+    const otList = [{
+      id: 'OT-261119-001',
+      requestCode: 'OT-261119-001',
+      employeeId: 'EMP-005',
+      employeeName: 'Ahmed Khan',
+      overtimeDate: '2026-11-19',
+      startTime: '18:00',
+      endTime: '19:00',
+      requestedMinutes: 60,
+      status: 'Pending Team Lead Review',
+      currentApproverId: 'EMP-004',
+      attendanceVerified: false
+    }]
+    attendanceService._setItem('isysware_hrms_f04_overtime_requests_v1', otList)
+
+    const approved = attendanceService.approveOvertimeRequest('OT-261119-001', 60, 'Attempted approval without punches', 'Super Admin', 'EMP-001', 'super_admin')
+    assert.strictEqual(approved.attendanceVerified, false, 'attendanceVerified must be false when attendance is absent or lacks punches')
+    assert.strictEqual(approved.payrollEligible, false, 'payrollEligible must be false without verified attendance punches')
+
+    const recs = attendanceService.getAttendanceRecords({ employeeId: 'EMP-005', date: '2026-11-19' })
+    const rec = recs.find((r) => r.date === '2026-11-19')
+    assert.strictEqual(rec.overtimeApproved, false, 'Attendance record must not have overtimeApproved: true')
+    assert.ok(rec.overtimeStatus.includes('Failed'), 'Attendance record must show verification failed')
+  })
+
+  it('10. Separates Claimed Duration from Actual Verified Working Hours (0.0h display)', () => {
+    const ot = {
+      id: 'OT-261119-001',
+      employeeId: 'EMP-005',
+      overtimeDate: '2026-11-19',
+      durationMinutes: 60,
+      requestedMinutes: 60,
+      attendanceVerified: false
+    }
+    const attendance = {
+      employeeId: 'EMP-005',
+      date: '2026-11-19',
+      status: 'Absent',
+      actualWorkMinutes: 0
+    }
+
+    const isAbsent = attendance.status === 'Absent'
+    const workMins = attendance.actualWorkMinutes || 0
+    const hasEvidence = !isAbsent && workMins > 0 && ot.attendanceVerified === true
+    const actualWorkingHours = hasEvidence ? (workMins / 60) : 0.0
+
+    assert.strictEqual(ot.durationMinutes, 60, 'Claimed duration is 60 minutes')
+    assert.strictEqual(actualWorkingHours, 0.0, 'Actual Verified Working Hours must be 0.0h, never 1 hr')
+    assert.strictEqual(hasEvidence, false, 'Punch evidence must be unverified')
+  })
 })

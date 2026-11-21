@@ -215,13 +215,17 @@ export const overtimeService = {
     const result = await prisma.$transaction(async (tx) => {
       let verifiedAttendanceId = null
       if (decision === 'APPROVED') {
-        const attRecord = await tx.attendanceRecord.findUnique({
-          where: { employeeId_attendanceDate: { employeeId: ot.employeeId, attendanceDate: ot.overtimeDate } },
+        const empIds = [ot.employeeId, ot.employee?.id, ot.employee?.employeeCode].filter(Boolean)
+        const attRecord = await tx.attendanceRecord.findFirst({
+          where: {
+            employeeId: { in: empIds },
+            attendanceDate: ot.overtimeDate
+          },
           include: { punches: true }
         })
         const evidence = verifyOvertimePunchEvidence(ot, attRecord)
         if (!evidence.verified) {
-          const error = new Error(`Overtime approval blocked: ${evidence.reason}. Claimed time is not actual punch evidence.`)
+          const error = new Error(`Overtime approval blocked: ${evidence.reason}. Genuine Check-In/Check-Out punch evidence is required. Claimed time is not actual punch evidence.`)
           error.code = 'ATTENDANCE_VERIFICATION_FAILED'
           error.status = 400
           throw error

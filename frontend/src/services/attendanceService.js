@@ -2675,9 +2675,9 @@ class AttendanceService {
     })
 
     // 5. ATTENDANCE SYNCHRONIZATION & PAYROLL ELIGIBILITY VERIFICATION
-    // Claimed hours are not verified worked hours; actual attendance evidence is verified before payroll eligibility
+    // Claimed hours are not verified worked hours; actual attendance evidence is verified before payroll eligibility.
     const records = [...this._getItem(STORAGE_KEYS.RECORDS, [])]
-    const recIdx = records.findIndex((r) => r.employeeId === req.employeeId && r.date === req.overtimeDate)
+    const recIdx = records.findIndex((r) => (r.employeeId === req.employeeId || r.employeeCode === req.employeeId) && (r.date === req.overtimeDate || r.attendanceDate === req.overtimeDate))
     if (recIdx !== -1) {
       const rec = records[recIdx]
       const isAbsent = (rec.primaryClassification || rec.status || '').toLowerCase() === 'absent'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import payrollService from '../../services/payrollService';
@@ -288,35 +288,35 @@ export default function HrAdminPayrollPage() {
             {activeTab === 'structures'
               ? 'Salary Structures'
               : activeTab === 'revisions'
-              ? 'Salary Revisions'
-              : activeTab === 'allowances'
-              ? 'Allowances & Benefits'
-              : activeTab === 'commissions'
-              ? 'Sales Commissions'
-              : activeTab === 'loans'
-              ? 'Loans & Advances'
-              : activeTab === 'tax'
-              ? 'Section 149 Tax'
-              : activeTab === 'payments'
-              ? 'Bank Advice & Payments'
-              : 'Payroll Preparation & Runs'}
+                ? 'Salary Revisions'
+                : activeTab === 'allowances'
+                  ? 'Allowances & Benefits'
+                  : activeTab === 'commissions'
+                    ? 'Sales Commissions'
+                    : activeTab === 'loans'
+                      ? 'Loans & Advances'
+                      : activeTab === 'tax'
+                        ? 'Section 149 Tax'
+                        : activeTab === 'payments'
+                          ? 'Bank Advice & Payments'
+                          : 'Payroll Preparation & Runs'}
           </h2>
           <p className="text-xs text-hrms-muted mt-0.5">
             {activeTab === 'structures'
               ? 'Review employee salary grading, base compensations, and allowance breakdowns.'
               : activeTab === 'revisions'
-              ? 'Draft employee compensation revision proposals for Super Admin executive review.'
-              : activeTab === 'allowances'
-              ? 'Record staff monthly allowances, medical benefits, and recurring subsidies.'
-              : activeTab === 'commissions'
-              ? 'Calculate sales commission batches and performance incentive bonuses.'
-              : activeTab === 'loans'
-              ? 'Company advance requests intake and monthly salary deduction tracking.'
-              : activeTab === 'tax'
-              ? 'Statutory FBR income tax withholding computations and verification.'
-              : activeTab === 'payments'
-              ? 'Prepare bank disbursement advice lists and verify employee account numbers.'
-              : 'Prepare monthly payroll drafts, verify attendance & overtime canonical inputs, and manage employee benefits.'}
+                ? 'Draft employee compensation revision proposals for Super Admin executive review.'
+                : activeTab === 'allowances'
+                  ? 'Record staff monthly allowances, medical benefits, and recurring subsidies.'
+                  : activeTab === 'commissions'
+                    ? 'Calculate sales commission batches and performance incentive bonuses.'
+                    : activeTab === 'loans'
+                      ? 'Company advance requests intake and monthly salary deduction tracking.'
+                      : activeTab === 'tax'
+                        ? 'Statutory FBR income tax withholding computations and verification.'
+                        : activeTab === 'payments'
+                          ? 'Prepare bank disbursement advice lists and verify employee account numbers.'
+                          : 'Prepare monthly payroll drafts, verify attendance & overtime canonical inputs, and manage employee benefits.'}
           </p>
         </div>
 
@@ -342,11 +342,10 @@ export default function HrAdminPayrollPage() {
 
       {actionMessage && (
         <div
-          className={`p-3 text-xs rounded-lg border flex items-center gap-2 ${
-            actionMessage.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-red-50 text-red-800 border-red-200'
-          }`}
+          className={`p-3 text-xs rounded-lg border flex items-center gap-2 ${actionMessage.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-red-50 text-red-800 border-red-200'
+            }`}
         >
           <i className={`fa-solid ${actionMessage.type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}`}></i>
           <span>{actionMessage.text}</span>
@@ -373,7 +372,7 @@ export default function HrAdminPayrollPage() {
               payrollRuns={payrollRuns}
               onViewRun={(run) => setSelectedRun(run)}
               onRefreshDraft={handleOpenRefreshModal}
-              // HR Admin cannot finalize or provide final Super Admin approval
+            // HR Admin cannot finalize or provide final Super Admin approval
             />
 
             <EmployeePayrollBreakdownTable
