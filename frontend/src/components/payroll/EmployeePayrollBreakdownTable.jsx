@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import StatusBadge from '@/components/common/StatusBadge'
@@ -24,7 +24,7 @@ export function EmployeePayrollBreakdownTable({
   })
 
   // Keep in sync if parent period changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialPeriod && initialPeriod !== activePeriod) {
       setActivePeriod(initialPeriod)
     }
