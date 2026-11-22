@@ -114,7 +114,19 @@ export const loanService = {
       }
     })
 
-    if (!loan) return null
+    if (!loan) {
+      const error = new Error(`Loan with ID '${id}' not found.`)
+      error.code = 'NOT_FOUND'
+      error.status = 404
+      throw error
+    }
+
+    if (requestingUser?.role === 'EMPLOYEE' && requestingUser.employee?.id !== loan.employeeId) {
+      const error = new Error('Access denied: You are not authorized to view another employee’s loan records.')
+      error.code = 'FORBIDDEN'
+      error.status = 403
+      throw error
+    }
 
     let approvedBy = null
     if (loan.approvedById) {
@@ -132,23 +144,6 @@ export const loanService = {
       approvedBy,
       approvedDate: loan.updatedAt ? new Date(loan.updatedAt).toISOString().slice(0, 10) : (loan.disbursementDate ? new Date(loan.disbursementDate).toISOString().slice(0, 10) : null)
     }
-  },
-
-    if (!loan) {
-      const error = new Error(`Loan with ID '${id}' not found.`)
-      error.code = 'NOT_FOUND'
-      error.status = 404
-      throw error
-    }
-
-    if (requestingUser?.role === 'EMPLOYEE' && requestingUser.employee?.id !== loan.employeeId) {
-      const error = new Error('Access denied: You are not authorized to view another employee’s loan records.')
-      error.code = 'FORBIDDEN'
-      error.status = 403
-      throw error
-    }
-
-    return loan
   },
 
   /**
