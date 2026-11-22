@@ -96,13 +96,13 @@ export function LoanManagementTable({
                       {l.reason}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-900 font-bold">
+                  <td className="px-4 py-3 text-right text-slate-900 font-bold whitespace-nowrap">
                     PKR {(l.principalAmount || 0).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-indigo-700">
+                  <td className="px-4 py-3 text-right font-medium text-indigo-700 whitespace-nowrap">
                     PKR {(l.installmentAmount || 0).toLocaleString()} /mo
                   </td>
-                  <td className="px-4 py-3 text-center font-sans">
+                  <td className="px-4 py-3 text-center font-sans whitespace-nowrap">
                     <span className="font-bold text-slate-800">{l.installmentsPaid || 0}</span>
                     <span className="text-slate-400"> / {l.totalInstallments} months</span>
                     {l.nextDeductionPeriod && (l.status === 'Active' || l.status === 'DISBURSED') && (
@@ -111,13 +111,13 @@ export function LoanManagementTable({
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right text-emerald-700 font-medium">
+                  <td className="px-4 py-3 text-right text-emerald-700 font-medium whitespace-nowrap">
                     PKR {(l.repaidAmount || 0).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 text-right font-black text-rose-800 bg-rose-50/30">
+                  <td className="px-4 py-3 text-right font-black text-rose-800 bg-rose-50/30 whitespace-nowrap">
                     PKR {(l.outstandingBalance || 0).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3 font-sans">
+                  <td className="px-4 py-3 font-sans whitespace-nowrap">
                     <StatusBadge status={l.status === 'PENDING' ? 'Pending Super Admin Review' : l.status} />
                   </td>
                   <td className="px-4 py-3 text-right font-sans">

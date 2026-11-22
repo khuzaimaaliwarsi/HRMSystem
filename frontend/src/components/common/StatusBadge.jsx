@@ -64,7 +64,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center font-medium rounded-full border leading-none select-none",
+        "inline-flex items-center font-medium rounded-full border leading-none select-none whitespace-nowrap shrink-0",
         variantStyles[resolvedVariant] || variantStyles.neutral,
         sizeStyles[size] || sizeStyles.md,
         className

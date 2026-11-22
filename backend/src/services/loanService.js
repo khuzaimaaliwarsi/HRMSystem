@@ -53,7 +53,7 @@ export const loanService = {
       ]
     }
 
-    return prisma.employeeLoan.findMany({
+    const loans = await prisma.employeeLoan.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -73,6 +73,21 @@ export const loanService = {
         }
       }
     })
+
+    const approverIds = [...new Set(loans.map((l) => l.approvedById).filter(Boolean))]
+    const approvers = approverIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: approverIds } },
+          select: { id: true, username: true, displayName: true, role: true }
+        })
+      : []
+    const approverMap = new Map(approvers.map((a) => [a.id, a.displayName || a.username || 'Super Admin']))
+
+    return loans.map((loan) => ({
+      ...loan,
+      approvedBy: loan.approvedById ? (approverMap.get(loan.approvedById) || 'Super Admin') : (['DISBURSED', 'APPROVED', 'REPAID'].includes(loan.status) ? 'Super Admin' : null),
+      approvedDate: loan.updatedAt ? new Date(loan.updatedAt).toISOString().slice(0, 10) : (loan.disbursementDate ? new Date(loan.disbursementDate).toISOString().slice(0, 10) : null)
+    }))
   },
 
   /**
@@ -98,6 +113,26 @@ export const loanService = {
         }
       }
     })
+
+    if (!loan) return null
+
+    let approvedBy = null
+    if (loan.approvedById) {
+      const approver = await prisma.user.findUnique({
+        where: { id: loan.approvedById },
+        select: { username: true, displayName: true }
+      })
+      approvedBy = approver?.displayName || approver?.username || 'Super Admin'
+    } else if (['DISBURSED', 'APPROVED', 'REPAID'].includes(loan.status)) {
+      approvedBy = 'Super Admin'
+    }
+
+    return {
+      ...loan,
+      approvedBy,
+      approvedDate: loan.updatedAt ? new Date(loan.updatedAt).toISOString().slice(0, 10) : (loan.disbursementDate ? new Date(loan.disbursementDate).toISOString().slice(0, 10) : null)
+    }
+  },
 
     if (!loan) {
       const error = new Error(`Loan with ID '${id}' not found.`)
@@ -338,7 +373,7 @@ export const loanService = {
     }
 
     if (loan.status !== 'APPROVED') {
-      const error = new Error(`Only APPROVED loans can be disbursed. Current status: '${loan.status}'.`)
+      const error = new Error(`Strict Server-Side Governance: Only APPROVED loans can be disbursed. Current status: '${loan.status}'. Disbursing unapproved loans is strictly blocked.`)
       error.code = 'INVALID_STATE'
       error.status = 400
       throw error

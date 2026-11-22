@@ -129,8 +129,9 @@ export async function syncOrganization() {
       employeeService._notify()
     }
 
-    if (empRes.status === 'fulfilled' && Array.isArray(empRes.value)) {
-      const emps = empRes.value.map((e) => {
+    const rawEmployees = empRes.status === 'fulfilled' ? (Array.isArray(empRes.value) ? empRes.value : (Array.isArray(empRes.value?.data) ? empRes.value.data : (Array.isArray(empRes.value?.employees) ? empRes.value.employees : null))) : null
+    if (Array.isArray(rawEmployees)) {
+      const emps = rawEmployees.map((e) => {
         const fullName = `${e.firstName || ''} ${e.lastName || ''}`.trim() || e.employeeCode
         return {
           id: e.employeeCode || e.id,

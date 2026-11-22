@@ -152,8 +152,19 @@ class EmployeeService {
 
           const freshQaVal = this._getItem('isysware_hrms_fresh_qa_mode_active', false)
           const isFreshQA = freshQaVal === true || freshQaVal === 'true'
-          // Ensure EMP-016 (Ahmed Raza QA) is canonically synchronized to Team Lead Hina Farooq (EMP-005) only in standard demo mode
-          if (typeof window !== 'undefined' && !isFreshQA) {
+          const isLiveDatabase = empList.some((e) => e.cuid) || empList.length >= 13
+
+          // Remove synthetic non-backend QA employee if live PostgreSQL database is the authority (13 canonical staff)
+          if (empList.some((e) => e.cuid)) {
+            const syntheticIdx = empList.findIndex((e) => e.id === 'EMP-016' && !e.cuid)
+            if (syntheticIdx !== -1) {
+              empList.splice(syntheticIdx, 1)
+              empChanged = true
+            }
+          }
+
+          // Ensure EMP-016 (Ahmed Raza QA) is canonically synchronized only in offline demo environments with < 13 staff
+          if (typeof window !== 'undefined' && !isFreshQA && !isLiveDatabase) {
             const ahmedIdx = empList.findIndex((e) => e.id === 'EMP-016' || (e.name && e.name.toLowerCase().includes('ahmed raza')))
             if (ahmedIdx === -1) {
               empList.push({ ...QA_EMPLOYEE_AHMED_RAZA })

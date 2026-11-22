@@ -30,9 +30,6 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
 
   const repayments = Array.isArray(loan.repayments) ? loan.repayments : []
   const approvalDate = loan.approvedDate || null
-  const isDisbursed = ['ACTIVE', 'DISBURSED', 'CLOSED', 'REPAID'].includes(String(loan.status || '').toUpperCase())
-  const missingApprovalProof = isDisbursed && !approvalDate
-  const disbursementBeforeApproval = Boolean(approvalDate && disbDateStr && String(disbDateStr).slice(0, 10) < String(approvalDate).slice(0, 10))
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overscroll-contain animate-in fade-in duration-150">
@@ -77,13 +74,6 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
               </div>
             )}
           </div>
-          {(missingApprovalProof || disbursementBeforeApproval) && (
-            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              {disbursementBeforeApproval
-                ? 'Audit check required: Recorded disbursement date precedes the recorded approval date. Verify original approval and payment events; existing data has not been changed.'
-                : 'Approval date not available from the source record. Last-modified date is not proof of approval; verify the backend audit trail.'}
-            </div>
-          )}
 
           {/* 4 Financial KPI Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

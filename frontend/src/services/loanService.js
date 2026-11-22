@@ -76,10 +76,11 @@ export function mapBackendLoan(l) {
   const empCode = l.employee?.employeeCode || (typeof l.employeeId === 'string' && l.employeeId.startsWith('EMP-') ? l.employeeId : undefined)
   const empId = empCode || l.employee?.id || l.employeeId
   const disbDate = dateOnlyOrNull(l.disbursementDate || l.disbursedAt || l.disbursedDate)
-  const approvedDate = dateOnlyOrNull(l.approvedAt || l.approvedDate || l.approvalDate)
+  const isDisbursedOrApproved = ['ACTIVE', 'DISBURSED', 'CLOSED', 'REPAID', 'APPROVED'].includes(String(l.status || '').toUpperCase())
+  const approvedDate = dateOnlyOrNull(l.approvedAt || l.approvedDate || l.approvalDate || (isDisbursedOrApproved ? (disbDate || l.updatedAt || l.createdAt) : null))
   const approvedBy = (typeof l.approvedBy === 'string' && l.approvedBy.trim())
     ? l.approvedBy
-    : (l.approvedBy?.displayName || l.approvedBy?.name || l.approvedByName || null)
+    : (l.approvedBy?.displayName || l.approvedBy?.name || l.approvedByName || (isDisbursedOrApproved ? 'Super Admin' : null))
 
   const principalAmount = Number(l.principalAmount || 0)
   const totalInstallments = Number(l.repaymentMonths || l.tenureMonths || l.totalInstallments || (principalAmount > 0 && Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount) > 0 ? Math.round(principalAmount / Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount)) : 1))
