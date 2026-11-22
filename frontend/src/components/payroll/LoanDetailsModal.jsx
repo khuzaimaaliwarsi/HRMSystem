@@ -132,7 +132,7 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
                     <th className="px-3.5 py-2.5">Billing Period</th>
                     <th className="px-3.5 py-2.5">Deduction Due Date</th>
                     <th className="px-3.5 py-2.5 text-right">Installment Amount</th>
-                    <th className="px-3.5 py-2.5 text-right">Remaining Balance</th>
+                    <th className="px-3.5 py-2.5 text-right">Projected Balance</th>
                     <th className="px-3.5 py-2.5 text-center">Status</th>
                   </tr>
                 </thead>
@@ -179,7 +179,7 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
           </div>
 
           {/* Repayment History Ledger (if any) */}
-          {repayments.length > 0 && (
+          {repayments.length > 0 ? (
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
                 <AppIcon name="receipt" className="w-3.5 h-3.5 text-emerald-700" />
@@ -219,6 +219,13 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
                   </tbody>
                 </table>
               </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-lg text-xs text-slate-500 flex items-center gap-2">
+              <AppIcon name="clock" className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>
+                <strong className="text-slate-700">Repayment Ledger:</strong> No repayments posted yet. Draft payroll runs do not deduct loan balances; installments are officially recorded as Paid only upon Super Admin payroll disbursement.
+              </span>
             </div>
           )}
 

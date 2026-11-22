@@ -16,8 +16,14 @@ export function generateLoanSchedule(loan) {
   const principal = Number(loan.principalAmount || 0)
   const totalInstallments = Number(loan.totalInstallments || loan.repaymentMonths || loan.tenureMonths || (principal > 0 && Number(loan.installmentAmount || loan.monthlyInstallment) > 0 ? Math.round(principal / Number(loan.installmentAmount || loan.monthlyInstallment)) : 1))
   const installmentAmount = Number(loan.installmentAmount || loan.monthlyInstallment || (totalInstallments > 0 ? Math.round(principal / totalInstallments) : 0))
-  const repayments = Array.isArray(loan.repayments) ? loan.repayments : []
-  const installmentsPaid = Number(loan.installmentsPaid || loan.paidInstallments || loan.paidInstallmentsCount || repayments.length || 0)
+  const repayments = Array.isArray(loan.repayments) ? loan.repayments.filter((r) => !r.isDraft && r.status !== 'DRAFT' && r.status !== 'PENDING') : []
+  const installmentsPaid = (loan.installmentsPaid !== undefined && loan.installmentsPaid !== null)
+    ? Number(loan.installmentsPaid)
+    : (loan.paidInstallments !== undefined && loan.paidInstallments !== null)
+      ? Number(loan.paidInstallments)
+      : (loan.paidInstallmentsCount !== undefined && loan.paidInstallmentsCount !== null)
+        ? Number(loan.paidInstallmentsCount)
+        : repayments.length
   
   const disbDate = loan.disbursementDate || loan.disbursedDate
   let startMonthStr = loan.repaymentStartMonth || (disbDate ? String(disbDate).slice(0, 7) : '2026-11')
@@ -36,10 +42,11 @@ export function generateLoanSchedule(loan) {
     const amt = Math.min(remaining, installmentAmount)
     remaining = Math.max(0, remaining - amt)
     
-    // Check if this installment has been repaid
+    // Check if this installment has been repaid (draft payroll records strictly excluded)
     const isPaid = i < installmentsPaid || repayments.some((r) => {
+      if (r.status === 'DRAFT' || r.status === 'PENDING' || r.isDraft) return false
       const rPeriod = r.period || (r.repaymentDate ? String(r.repaymentDate).slice(0, 7) : null)
-      return rPeriod === periodCode
+      return rPeriod === periodCode && (r.status === 'PAID' || r.status === 'DEDUCTED' || !r.status)
     })
 
     schedule.push({
@@ -67,10 +74,24 @@ export function mapBackendLoan(l) {
   const principalAmount = Number(l.principalAmount || 0)
   const totalInstallments = Number(l.repaymentMonths || l.tenureMonths || l.totalInstallments || (principalAmount > 0 && Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount) > 0 ? Math.round(principalAmount / Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount)) : 1))
   const installmentAmount = Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount || (totalInstallments > 0 ? Math.round(principalAmount / totalInstallments) : 0))
-  const repayments = Array.isArray(l.repayments) ? l.repayments : []
-  const installmentsPaid = Number(l.paidInstallments || l.installmentsPaid || repayments.length || 0)
-  const repaidAmount = Number(l.totalRepaidAmount || l.totalRepaid || l.repaidAmount || repayments.reduce((s, r) => s + Number(r.amount || 0), 0))
-  const outstandingBalance = Number(l.remainingBalance ?? l.outstandingBalance ?? Math.max(0, principalAmount - repaidAmount))
+  const repayments = Array.isArray(l.repayments) ? l.repayments.filter((r) => !r.isDraft && r.status !== 'DRAFT' && r.status !== 'PENDING') : []
+  const installmentsPaid = (l.paidInstallments !== undefined && l.paidInstallments !== null)
+    ? Number(l.paidInstallments)
+    : (l.installmentsPaid !== undefined && l.installmentsPaid !== null)
+      ? Number(l.installmentsPaid)
+      : repayments.length
+  const repaidAmount = (l.totalRepaidAmount !== undefined && l.totalRepaidAmount !== null)
+    ? Number(l.totalRepaidAmount)
+    : (l.totalRepaid !== undefined && l.totalRepaid !== null)
+      ? Number(l.totalRepaid)
+      : (l.repaidAmount !== undefined && l.repaidAmount !== null)
+        ? Number(l.repaidAmount)
+        : repayments.reduce((s, r) => s + Number(r.amount || 0), 0)
+  const outstandingBalance = (l.remainingBalance !== undefined && l.remainingBalance !== null)
+    ? Number(l.remainingBalance)
+    : (l.outstandingBalance !== undefined && l.outstandingBalance !== null)
+      ? Number(l.outstandingBalance)
+      : Math.max(0, principalAmount - repaidAmount)
 
   let repaymentStartMonth = l.repaymentStartMonth || l.repaymentStartDate ? String(l.repaymentStartMonth || l.repaymentStartDate).slice(0, 7) : null
   if (!repaymentStartMonth && disbDate) {

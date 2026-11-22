@@ -638,8 +638,8 @@ test('Payroll Complete Workflow — 19. Loan Management Disbursement Date & Amor
   assert.ok(tableContent.includes('View Schedule'), 'LoanManagementTable must render View Schedule action button')
   assert.ok(tableContent.includes('Disbursed:'), 'LoanManagementTable must render Disbursed date badge')
 
-  // 2. Verify loanService.generateLoanSchedule computes correct 3-month schedule
-  const sampleLoan = {
+  // 2. Verify loanService.generateLoanSchedule computes correct 3-month schedule for canonical active loan (0 Paid, 9,000 Outstanding)
+  const canonicalLoan = {
     id: 'LN-2026-001',
     employeeId: 'EMP-004',
     employeeName: 'UAT Dev Manager',
@@ -648,12 +648,13 @@ test('Payroll Complete Workflow — 19. Loan Management Disbursement Date & Amor
     totalInstallments: 3,
     disbursementDate: '2026-11-01',
     repaymentStartMonth: '2026-11',
-    installmentsPaid: 1,
-    outstandingBalance: 6000,
-    repaidAmount: 3000
+    installmentsPaid: 0,
+    outstandingBalance: 9000,
+    repaidAmount: 0,
+    repayments: []
   }
 
-  const schedule = loanService.generateLoanSchedule(sampleLoan)
+  const schedule = loanService.generateLoanSchedule(canonicalLoan)
   assert.equal(schedule.length, 3, 'Must produce exact 3-month installment schedule')
 
   // Month 1: 2026-11
@@ -661,23 +662,33 @@ test('Payroll Complete Workflow — 19. Loan Management Disbursement Date & Amor
   assert.equal(schedule[0].installmentNumber, 1)
   assert.equal(schedule[0].amount, 3000)
   assert.equal(schedule[0].balanceAfter, 6000)
-  assert.equal(schedule[0].status, 'PAID')
+  assert.equal(schedule[0].status, 'PENDING', 'Draft/unposted payroll must remain PENDING')
 
   // Month 2: 2026-12
   assert.equal(schedule[1].periodCode, '2026-12')
   assert.equal(schedule[1].installmentNumber, 2)
   assert.equal(schedule[1].amount, 3000)
   assert.equal(schedule[1].balanceAfter, 3000)
-  assert.equal(schedule[1].status, 'PENDING')
+  assert.equal(schedule[1].status, 'PENDING', 'Month 2 must remain PENDING')
 
   // Month 3: 2027-01
   assert.equal(schedule[2].periodCode, '2027-01')
   assert.equal(schedule[2].installmentNumber, 3)
   assert.equal(schedule[2].amount, 3000)
   assert.equal(schedule[2].balanceAfter, 0)
-  assert.equal(schedule[2].status, 'PENDING')
+  assert.equal(schedule[2].status, 'PENDING', 'Month 3 must remain PENDING')
 
-  // 3. Verify loanService.mapBackendLoan maps all essential date and schedule fields
+  // Invariant: Draft repayments must NEVER mark installment as PAID
+  const draftRepaymentsLoan = {
+    ...canonicalLoan,
+    repayments: [
+      { id: 'REP-DRAFT', period: '2026-11', amount: 3000, status: 'DRAFT', isDraft: true }
+    ]
+  }
+  const draftSchedule = loanService.generateLoanSchedule(draftRepaymentsLoan)
+  assert.equal(draftSchedule[0].status, 'PENDING', 'Draft repayment must NEVER mark installment as PAID')
+
+  // 3. Verify loanService.mapBackendLoan maps canonical active loan correctly from PostgreSQL schema
   const rawBackendLoan = {
     id: 'LN-BACKEND-999',
     employeeId: 'EMP-004',
@@ -687,20 +698,26 @@ test('Payroll Complete Workflow — 19. Loan Management Disbursement Date & Amor
     status: 'ACTIVE',
     disbursementDate: '2026-11-01T00:00:00.000Z',
     repaymentStartMonth: '2026-11',
-    nextDeductionPeriod: '2026-12',
+    nextDeductionPeriod: '2026-11',
     approvedBy: 'Super Admin',
-    repayments: [
-      { id: 'REP-1', period: '2026-11', amount: 3000, status: 'DEDUCTED', payrollRunId: 'PAY-2026-11-02' }
-    ]
+    totalRepaidAmount: 0,
+    remainingBalance: 9000,
+    repayments: []
   }
 
   const mapped = loanService.mapBackendLoan(rawBackendLoan)
   assert.equal(mapped.id, 'LN-BACKEND-999')
+  assert.equal(mapped.repaidAmount, 0, 'Canonical repaid must be 0')
+  assert.equal(mapped.outstandingBalance, 9000, 'Canonical balance must be 9000')
+  assert.equal(mapped.installmentsPaid, 0, 'Installments paid must be 0')
   assert.equal(mapped.disbursementDate, '2026-11-01')
   assert.equal(mapped.disbursedDate, '2026-11-01')
   assert.equal(mapped.repaymentStartMonth, '2026-11')
-  assert.equal(mapped.nextDeductionPeriod, '2026-12')
+  assert.equal(mapped.nextDeductionPeriod, '2026-11')
   assert.ok(Array.isArray(mapped.schedule), 'Schedule array must be generated or mapped')
   assert.equal(mapped.schedule.length, 3, 'Auto-generated schedule must match 3 months tenure')
+  assert.equal(mapped.schedule[0].status, 'PENDING')
+  assert.equal(mapped.schedule[1].status, 'PENDING')
+  assert.equal(mapped.schedule[2].status, 'PENDING')
 })
 
