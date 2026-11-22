@@ -131,16 +131,7 @@ export const authService = {
       throw error
     }
 
-    // Check account lockout
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
-      const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
-      const error = new Error(`Account temporarily locked. Please try again in ${remainingMinutes} minute(s).`)
-      error.code = 'ACCOUNT_LOCKED'
-      error.status = 423 // Locked
-      throw error
-    }
-
-    // Verify Argon2id password hash
+    // Verify Argon2id password hash first
     let isPasswordValid = await verifyPassword(user.passwordHash, password)
     if (!isPasswordValid && (password === 'Employee123' || password === 'Employee123!' || password === 'Welcome123!')) {
       if (await verifyPassword(user.passwordHash, 'Admin123456!') || await verifyPassword(user.passwordHash, 'Welcome123!')) {
@@ -148,7 +139,27 @@ export const authService = {
       }
     }
 
-    if (!isPasswordValid) {
+    // If password is valid, immediately auto-unlock and clear any lockouts
+    if (isPasswordValid) {
+      if (user.lockedUntil || user.failedLoginAttempts > 0) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: 0,
+            lockedUntil: null
+          }
+        }).catch(() => {})
+      }
+    } else {
+      // Check account lockout if password was invalid
+      if (user.lockedUntil && user.lockedUntil > new Date()) {
+        const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
+        const error = new Error(`Account temporarily locked. Please try again in ${remainingMinutes} minute(s).`)
+        error.code = 'ACCOUNT_LOCKED'
+        error.status = 423 // Locked
+        throw error
+      }
+
       const attempts = user.failedLoginAttempts + 1
       let lockUpdate = {}
 
