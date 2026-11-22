@@ -1052,7 +1052,18 @@ export class AdminSettingsService {
     }
 
     try {
-      // 1. Instant raw atomic TRUNCATE CASCADE (< 50ms execution in PostgreSQL)
+      // 1. Unlink employeeId on users first so foreign keys to employees are severed
+      await prisma.$executeRawUnsafe(`UPDATE "users" SET "employeeId" = NULL;`)
+
+      // 2. Clear sessions and tokens for non-superadmin accounts and purge non-superadmin users
+      await prisma.$executeRawUnsafe(`
+        DELETE FROM "sessions" WHERE "userId" IN (SELECT "id" FROM "users" WHERE "role" != 'SUPER_ADMIN');
+        DELETE FROM "password_reset_tokens";
+        DELETE FROM "users" WHERE "role" != 'SUPER_ADMIN';
+      `)
+
+      // 3. Truncate operational child tables safely (do NOT include "employees" or org tables here
+      // because in PostgreSQL TRUNCATE CASCADE will automatically truncate referencing tables like users)
       await prisma.$executeRawUnsafe(`
         TRUNCATE TABLE 
           "employee_allowances",
@@ -1118,22 +1129,36 @@ export class AdminSettingsService {
           "employee_career_history",
           "succession_history",
           "team_assignments",
-          "notifications",
-          "employees",
-          "teams",
-          "sub_departments",
-          "designations",
-          "departments"
+          "notifications"
         CASCADE;
       `)
 
-      // 2. Unlink employeeId on users and purge non-Super Admin portal accounts
+      // 4. Safely delete employees and organizational structures (WITHOUT TRUNCATE CASCADE so users table is untouched)
       await prisma.$executeRawUnsafe(`
-        UPDATE "users" SET "employeeId" = NULL;
-        DELETE FROM "sessions" WHERE "userId" IN (SELECT "id" FROM "users" WHERE "role" != 'SUPER_ADMIN');
-        DELETE FROM "password_reset_tokens";
-        DELETE FROM "users" WHERE "role" != 'SUPER_ADMIN';
+        UPDATE "departments" SET "headId" = NULL;
+        UPDATE "sub_departments" SET "managerId" = NULL;
+        UPDATE "teams" SET "teamLeadId" = NULL;
+        UPDATE "employees" SET "reportingManagerId" = NULL;
+        DELETE FROM "employees";
+        DELETE FROM "teams";
+        DELETE FROM "sub_departments";
+        DELETE FROM "designations";
+        DELETE FROM "departments";
       `)
+
+      // 5. Ensure Super Admin account is 100% present, active, and safeguarded
+      let saUser = await prisma.user.findFirst({
+        where: { role: 'SUPER_ADMIN' }
+      })
+      if (!saUser) {
+        const { default: authService } = await import('./authService.js')
+        await authService.bootstrapSuperAdmin()
+      } else if (!saUser.isActive || saUser.lockedUntil) {
+        await prisma.user.update({
+          where: { id: saUser.id },
+          data: { isActive: true, lockedUntil: null, failedLoginAttempts: 0 }
+        })
+      }
 
       const preservedUsersCount = await prisma.user.count()
       const preservedEmployeesCount = await prisma.employee.count()

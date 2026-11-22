@@ -71,37 +71,49 @@ export const authService = {
       throw error
     }
 
-    // Lookup user by username, email, linked employee ID/code, employee name, or displayName
-    const cleanId = identifier.trim()
-    const nameParts = cleanId.split(/\s+/)
-    const noSpacesId = cleanId.replace(/\s+/g, '')
-    const underscoreId = cleanId.replace(/\s+/g, '_')
-    const hyphenId = cleanId.replace(/\s+/g, '-')
+    const cleanId = String(identifier).trim()
+    if (!cleanId) {
+      const error = new Error('Username/email and password are required')
+      error.code = 'VALIDATION_ERROR'
+      error.status = 400
+      throw error
+    }
 
-    const user = await prisma.user.findFirst({
+    const cleanLower = cleanId.toLowerCase()
+
+    // Automatic Super Admin recovery check:
+    // If the database has 0 Super Admin accounts (e.g. after a destructive purge or empty db state),
+    // restore access using the authorized bootstrap mechanism.
+    const isSuperAdminIdentifier = (
+      cleanLower === (env.bootstrapAdmin?.username || 'superadmin').toLowerCase() ||
+      cleanLower === (env.bootstrapAdmin?.email || 'superadmin@isysware.com').toLowerCase() ||
+      cleanLower === 'super admin'
+    )
+
+    if (isSuperAdminIdentifier) {
+      const saCount = await prisma.user.count({
+        where: { role: 'SUPER_ADMIN' }
+      }).catch(() => 0)
+
+      if (saCount === 0) {
+        await this.bootstrapSuperAdmin().catch((err) => {
+          console.error('[authService] Auto-bootstrap Super Admin error:', err.message)
+        })
+      }
+    }
+
+    // Exact, case-insensitive candidate lookup across:
+    // 1. Username
+    // 2. Email
+    // 3. Employee Code (via linked employee.employeeCode)
+    // 4. Exact Display Name
+    const candidates = await prisma.user.findMany({
       where: {
         OR: [
           { username: { equals: cleanId, mode: 'insensitive' } },
-          { username: { equals: noSpacesId, mode: 'insensitive' } },
-          { username: { equals: underscoreId, mode: 'insensitive' } },
-          { username: { equals: hyphenId, mode: 'insensitive' } },
-          { displayName: { equals: cleanId, mode: 'insensitive' } },
-          { displayName: { contains: cleanId, mode: 'insensitive' } },
-          { email: { equals: cleanId.toLowerCase(), mode: 'insensitive' } },
+          { email: { equals: cleanId, mode: 'insensitive' } },
           { employee: { employeeCode: { equals: cleanId, mode: 'insensitive' } } },
-          { employee: { id: cleanId } },
-          { employee: { firstName: { equals: cleanId, mode: 'insensitive' } } },
-          { employee: { lastName: { equals: cleanId, mode: 'insensitive' } } },
-          ...(nameParts.length >= 2 ? [
-            {
-              employee: {
-                AND: [
-                  { firstName: { contains: nameParts[0], mode: 'insensitive' } },
-                  { lastName: { contains: nameParts.slice(1).join(' '), mode: 'insensitive' } }
-                ]
-              }
-            }
-          ] : [])
+          { displayName: { equals: cleanId, mode: 'insensitive' } }
         ]
       },
       include: {
@@ -119,11 +131,11 @@ export const authService = {
       }
     })
 
-    if (!user) {
+    if (candidates.length === 0) {
       await logSecurityEvent({
         role: 'GUEST',
         actionType: 'LOGIN_FAILED',
-        reason: `Failed login attempt for non-existent identifier: ${identifier.slice(0, 4)}***`,
+        reason: `Failed login attempt for non-existent identifier: ${cleanId.slice(0, 4)}***`,
         ipAddress: reqMeta.ipAddress
       })
       const error = new Error('Invalid username or password')
@@ -132,8 +144,45 @@ export const authService = {
       throw error
     }
 
+    let user = null
+    if (candidates.length === 1) {
+      user = candidates[0]
+    } else {
+      // Multiple candidates matched.
+      // Check if there is an exact unique match on username, email, or employeeCode
+      const uniqueMatches = candidates.filter((u) =>
+        (u.username && u.username.toLowerCase() === cleanLower) ||
+        (u.email && u.email.toLowerCase() === cleanLower) ||
+        (u.employee?.employeeCode && u.employee.employeeCode.toLowerCase() === cleanLower)
+      )
+
+      if (uniqueMatches.length === 1) {
+        user = uniqueMatches[0]
+      } else {
+        // Multiple accounts share this exact display name (or multiple ambiguous matches)
+        await logSecurityEvent({
+          role: 'GUEST',
+          actionType: 'LOGIN_AMBIGUOUS',
+          reason: `Ambiguous login attempt for display name: ${cleanId} (${candidates.length} accounts matched)`,
+          ipAddress: reqMeta.ipAddress
+        })
+        const error = new Error('Multiple accounts found with this display name. Please log in using your Email or Username.')
+        error.code = 'AMBIGUOUS_LOGIN'
+        error.status = 400
+        throw error
+      }
+    }
+
     // Account state check
     if (!user.isActive) {
+      await logSecurityEvent({
+        userId: user.id,
+        employeeCode: user.employee?.employeeCode,
+        role: user.role,
+        actionType: 'LOGIN_BLOCKED',
+        reason: 'Attempted login to inactive account',
+        ipAddress: reqMeta.ipAddress
+      })
       const error = new Error('Account is inactive. Please contact your HR administrator.')
       error.code = 'ACCOUNT_DISABLED'
       error.status = 403
@@ -471,6 +520,17 @@ export const authService = {
     })
 
     if (existingAdmin) {
+      if (!existingAdmin.isActive || existingAdmin.lockedUntil) {
+        await prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: {
+            isActive: true,
+            lockedUntil: null,
+            failedLoginAttempts: 0
+          }
+        }).catch(() => {})
+      }
+
       return {
         created: false,
         message: 'Protected Super Admin account already exists. Bootstrap skipped.',
