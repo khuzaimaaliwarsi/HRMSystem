@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { reportService } from '../services/reportService.js'
+import { loanService } from '../services/loanService.js'
 
 const superAdmin = { id: 'usr_super', name: 'Super Admin', role: 'super_admin' }
 
@@ -131,7 +132,7 @@ describe('F14 Reporting & Analytics — Comprehensive Root-Cause Verification (A
   })
 
   it('9. RPT-BEN-005 & RPT-BEN-007: Canonical loan LN-2026-001 (Principal 9,000, Recovered 0, Outstanding 9,000)', async () => {
-    // RPT-BEN-005
+    // 1. Single loan check
     const ben5 = await reportService.generateReport('RPT-BEN-005', {}, superAdmin)
     assert.strictEqual(ben5.rows.length, 1, 'Only active canonical loan LN-2026-001 on ledger')
     const ln = ben5.rows[0]
@@ -148,6 +149,31 @@ describe('F14 Reporting & Analytics — Comprehensive Root-Cause Verification (A
     assert.strictEqual(lnSchedule.installmentDue, 3000)
     assert.strictEqual(lnSchedule.payrollRecovered, 0)
     assert.strictEqual(lnSchedule.variance, -3000)
+
+    // 2. Production Simulation: 5 loans in storage (1 Active, 3 Rejected, 1 Pending = 41,000 raw principal, 14,500 raw installments)
+    const backupLoans = loanService._getItem('isysware_hrms_f06_loans_v1')
+    try {
+      loanService._setItem('isysware_hrms_f06_loans_v1', [
+        { id: 'LN-2026-001', employeeId: 'EMP-004', employeeName: 'UAT Dev Manager', principalAmount: 9000, installmentAmount: 3000, status: 'Active', outstandingBalance: 9000, totalRecovered: 0, repaidAmount: 0, repaymentStartMonth: '2026-11' },
+        { id: 'LN-2026-002', employeeId: 'EMP-004', employeeName: 'UAT Dev Manager', principalAmount: 9000, installmentAmount: 3000, status: 'Rejected', outstandingBalance: 9000, totalRecovered: 0, repaidAmount: 0 },
+        { id: 'LN-2026-003', employeeId: 'EMP-004', employeeName: 'UAT Dev Manager', principalAmount: 9000, installmentAmount: 3000, status: 'Rejected', outstandingBalance: 9000, totalRecovered: 0, repaidAmount: 0 },
+        { id: 'LN-2026-004', employeeId: 'EMP-004', employeeName: 'UAT Dev Manager', principalAmount: 9000, installmentAmount: 3000, status: 'Rejected', outstandingBalance: 9000, totalRecovered: 0, repaidAmount: 0 },
+        { id: 'LN-2026-005', employeeId: 'EMP-004', employeeName: 'UAT Dev Manager', principalAmount: 5000, installmentAmount: 2500, status: 'Pending Super Admin Review', outstandingBalance: 5000, totalRecovered: 0, repaidAmount: 0 }
+      ])
+
+      const prodBen5 = await reportService.generateReport('RPT-BEN-005', {}, superAdmin)
+      assert.strictEqual(prodBen5.rows.length, 1, 'Strict exclusion: Rejected and Pending loans must NEVER appear on loan ledger')
+      assert.strictEqual(prodBen5.summary.totalPrincipalDisbursed, 9000, 'Total principal must be exactly 9,000 (NEVER 41,000)')
+      assert.strictEqual(prodBen5.summary.totalOutstandingBalance, 9000, 'Total outstanding must be exactly 9,000 (NEVER 41,000)')
+      assert.strictEqual(prodBen5.reconciliation.reconciled, true)
+
+      const prodBen7 = await reportService.generateReport('RPT-BEN-007', {}, superAdmin)
+      assert.strictEqual(prodBen7.rows.length, 1, 'Strict exclusion: Only Active loans qualify for due installments')
+      assert.strictEqual(prodBen7.summary.totalDue, 3000, 'Total installment due must be exactly 3,000 (NEVER 14,500)')
+      assert.strictEqual(prodBen7.reconciliation.reconciled, true)
+    } finally {
+      loanService._setItem('isysware_hrms_f06_loans_v1', backupLoans)
+    }
   })
 
   it('10. RPT-POL-001: Active policies reflect complete set of corporate governance standards', async () => {

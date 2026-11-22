@@ -182,7 +182,7 @@ export const reportDataFetcher = {
       department: e.department || 'General',
       team: e.team || 'Core',
       designation: e.designation || 'Staff',
-      manager: e.reportingManagerName || e.managerName || 'Tariq Mehmood',
+      manager: e.reportingManagerName || e.managerName || 'Reporting Manager',
       employmentType: e.employmentType || 'Permanent',
       workArrangement: e.workArrangement || 'Office',
       joinDate: e.joinDate || '2023-01-01',
@@ -256,7 +256,7 @@ export const reportDataFetcher = {
         rows.push({
           department: dept.name,
           team: team.name,
-          manager: team.managerName || 'Tariq Mehmood',
+          manager: team.managerName || 'Department Manager',
           active,
           probation,
           inactive,
@@ -286,7 +286,7 @@ export const reportDataFetcher = {
       rows.push({
         department: 'Operations & Other',
         team: 'General Staff',
-        manager: 'Tariq Mehmood',
+        manager: 'Department Manager',
         active,
         probation,
         inactive,
@@ -316,14 +316,14 @@ export const reportDataFetcher = {
       {
         id: 'EVT-001',
         employeeId: 'EMP-004',
-        employeeName: 'Zeeshan Ali',
+        employeeName: employeeService.getEmployeeById('EMP-004')?.name || 'Technical Specialist',
         effectiveDate: '2026-11-01',
         previousDepartment: 'Development',
         newDepartment: 'Development',
         previousRole: 'Technical Team Lead (Probation)',
         newRole: 'Technical Team Lead (Confirmed)',
         reason: 'Annual Performance Appraisal',
-        approvedBy: 'Tariq Mehmood (Super Admin)'
+        approvedBy: 'Super Admin Authority'
       }
     ]
 
@@ -337,7 +337,7 @@ export const reportDataFetcher = {
         previousRole: item.previousRole || (item.previousValue && item.previousValue !== '—' ? item.previousValue : 'Software Engineer'),
         newRole: item.newRole || (item.newValue || emp?.designation || 'Technical Specialist'),
         reason: item.reason || 'Career Progression & Alignment',
-        approvedBy: item.changedBy || item.approvedBy || 'Tariq Mehmood (Super Admin)'
+        approvedBy: item.changedBy || item.approvedBy || 'Super Admin Authority'
       }
     })
 
@@ -351,14 +351,14 @@ export const reportDataFetcher = {
         {
           id: 'EVT-202611-001',
           employeeId: 'EMP-004',
-          employeeName: emp4?.name || 'Zeeshan Ali',
+          employeeName: emp4?.name || 'Technical Specialist',
           effectiveDate: '2026-11-01',
           previousDepartment: emp4?.department || 'Development',
           newDepartment: emp4?.department || 'Development',
           previousRole: 'Technical Team Lead (Probation)',
           newRole: 'Technical Team Lead (Confirmed)',
           reason: 'Annual Performance Appraisal & Confirmation',
-          approvedBy: 'Tariq Mehmood (Super Admin)'
+          approvedBy: 'Super Admin Authority'
         }
       ]
     }
@@ -399,7 +399,7 @@ export const reportDataFetcher = {
         department: e.department || 'Development',
         joinDate: e.joinDate || '2026-08-01',
         expiryDate: e.probationEndDate || '2026-11-30',
-        reviewer: e.reportingManagerName || e.managerName || 'Bilal Siddiqui',
+        reviewer: e.reportingManagerName || e.managerName || 'Department Manager',
         dueStatus: isConfirmed ? 'Confirmed within 30 Days' : 'Due within 30 Days',
         currentDecision: isConfirmed ? 'Confirmed' : 'Recommended for Confirmation',
         status: isConfirmed ? 'Confirmed' : 'Pending HR Signoff'
@@ -486,7 +486,7 @@ export const reportDataFetcher = {
           eventDate: e.separationDate || e.terminationDate || '2026-10-31',
           vacancyRef: `VAC-SEP-${String(idx + 1).padStart(3, '0')}`,
           status: 'Completed',
-          authorizedBy: 'Ayesha Khan (HR Admin)'
+          authorizedBy: 'HR Administration'
         })
       } else if (e.joinDate && e.joinDate >= '2026-01-01') {
         events.push({
@@ -499,7 +499,7 @@ export const reportDataFetcher = {
           eventDate: e.joinDate,
           vacancyRef: e.vacancyId || `REQ-2026-${String(idx + 1).padStart(3, '0')}`,
           status: 'Completed',
-          authorizedBy: 'Ayesha Khan (HR Admin)'
+          authorizedBy: 'HR Administration'
         })
       }
     })
@@ -541,7 +541,7 @@ export const reportDataFetcher = {
       remaining: Math.max(0, (v.positionsCount || v.positions || 1) - (v.filledCount || 0)),
       priority: v.priority || 'Medium',
       status: v.status || 'Open',
-      approvedBy: v.approvedBy || 'Tariq Mehmood (Super Admin)'
+      approvedBy: v.approvedBy || 'Super Admin Authority'
     }))
 
     const totalPositions = rows.reduce((acc, r) => acc + r.openings, 0)
@@ -679,7 +679,7 @@ export const reportDataFetcher = {
         onboardingProgress: isProbation ? '60%' : '100%',
         evaluationRating: isProbation ? 'Pending' : 4.5,
         outcome: e.status === 'Active' ? 'Confirmed' : (isProbation ? 'In Review' : e.status),
-        approvedBy: 'Tariq Mehmood (Super Admin)'
+        approvedBy: 'Super Admin Authority'
       }
     })
 
@@ -900,7 +900,7 @@ export const reportDataFetcher = {
         actualCheckOut: r.checkOutTime || r.checkOut || '16:23',
         earlyMinutes: Number(r.earlyExitMinutes || 97),
         classification: r.isHalfDay ? 'Half-Day Early Departure' : 'Permitted Exception',
-        approvedBy: 'Tariq Mehmood (Super Admin)'
+        approvedBy: 'Super Admin Authority'
       }
     })
 
@@ -930,7 +930,7 @@ export const reportDataFetcher = {
         reason: w.reason || 'Remote scheduled work',
         punchVerified: 'Verified (IP & Geofence)',
         status: w.status || 'Approved',
-        approvedBy: w.approverName || 'Ali Raza (Team Lead)'
+        approvedBy: w.approverName || (w.status === 'Approved' ? 'Authorized Reviewer' : 'Pending Review')
       }
     })
 
@@ -958,7 +958,7 @@ export const reportDataFetcher = {
         startTime: f.expectedStartTime || f.actualStartTime || '10:00',
         endTime: f.expectedEndTime || f.actualEndTime || '15:30',
         payableHours: Number(f.durationHours || 5.5),
-        approvedBy: f.approverName || 'Tariq Mehmood (Super Admin)'
+        approvedBy: f.approverName || 'Super Admin Authority'
       }
     })
 
@@ -1028,7 +1028,7 @@ export const reportDataFetcher = {
         originalPunch: c.originalCheckIn || 'Missing Check-Out',
         correctedPunch: c.requestedCheckIn ? `${c.requestedCheckIn} (Regularized)` : '18:10 (Biometric Regularization)',
         reason: c.reason || 'Biometric sensor failure',
-        reviewer: c.approverName || 'Ali Raza (Team Lead)',
+        reviewer: c.approverName || (c.status === 'Approved' ? 'Authorized Reviewer' : 'Pending Review'),
         status: c.status || 'Approved'
       }
     })
@@ -1200,7 +1200,7 @@ export const reportDataFetcher = {
         startDate: r.startDate,
         endDate: r.endDate || r.startDate,
         days: Number(r.eligibleWorkingDays || r.calculatedDays || r.days || 1.0),
-        reviewer: r.approverName || r.decidedBy || r.currentApproverName || 'Bilal Siddiqui (Manager)',
+        reviewer: r.approverName || r.decidedBy || r.currentApproverName || 'Department Manager',
         status: r.status || 'Approved'
       }
     })
@@ -1256,11 +1256,17 @@ export const reportDataFetcher = {
   },
 
   'RPT-LEV-004': (_filters, _user) => {
+    const emps = employeeService.getEmployees() || []
+    const mgr = emps.find((e) => (e.designation || '').toLowerCase().includes('manager') || e.role === 'manager') || emps.find((e) => e.id === 'EMP-003')
+    const tl = emps.find((e) => (e.designation || '').toLowerCase().includes('lead') || e.role === 'team_lead') || emps.find((e) => e.id === 'EMP-004' || e.id === 'EMP-005')
+    const hr = emps.find((e) => (e.department || '').toLowerCase().includes('hr') || e.role === 'hr_admin') || emps.find((e) => e.id === 'EMP-002')
+    const sa = emps.find((e) => e.id === 'EMP-001')
+
     const reviewers = [
-      { id: 'MGR-001', name: 'Bilal Siddiqui', role: 'Manager', singleCap: 2, monthlyCap: 4, used: 1, esc: 1 },
-      { id: 'MGR-002', name: 'Ali Raza', role: 'Team Lead', singleCap: 2, monthlyCap: 4, used: 1, esc: 0 },
-      { id: 'HR-001', name: 'Ayesha Khan', role: 'HR Admin', singleCap: 5, monthlyCap: 15, used: 0, esc: 0 },
-      { id: 'SA-001', name: 'Tariq Mehmood', role: 'Super Admin', singleCap: 30, monthlyCap: 60, used: 1, esc: 0 }
+      { id: mgr?.id || 'MGR-001', name: mgr?.name || 'Department Manager', role: 'Department Manager', singleCap: 2, monthlyCap: 4, used: 1, esc: 1 },
+      { id: tl?.id || 'TL-001', name: tl?.name || 'Team Lead', role: 'Team Lead', singleCap: 2, monthlyCap: 4, used: 1, esc: 0 },
+      { id: hr?.id || 'HR-001', name: hr?.name || 'HR Administrator', role: 'HR Admin', singleCap: 5, monthlyCap: 15, used: 0, esc: 0 },
+      { id: sa?.id || 'SA-001', name: sa?.name || 'Managing Director', role: 'Super Admin', singleCap: 30, monthlyCap: 60, used: 1, esc: 0 }
     ]
 
     const rows = reviewers.map((r) => ({
@@ -1587,26 +1593,27 @@ export const reportDataFetcher = {
   },
 
   'RPT-PAY-003': (_filters, _user) => {
+    const staff = employeeService.getEmployees() || []
     const rows = isTest ? [
       {
         itemRef: 'ADJ-2026-001',
-        employeeName: 'Hamza Farooq',
+        employeeName: staff[0]?.name || 'Staff Member',
         component: 'Sales Commission',
         draftAmount: 30000,
         finalAmount: 45000,
         variance: 15000,
         reason: 'Late client payment clearance verified before post',
-        approvedBy: 'Tariq Mehmood (Super Admin)'
+        approvedBy: 'Super Admin Authority'
       },
       {
         itemRef: 'ADJ-2026-002',
-        employeeName: 'Usman Ghani',
+        employeeName: staff[1]?.name || 'Technical Staff',
         component: 'Unpaid Leave',
         draftAmount: 12000,
         finalAmount: 0,
         variance: -12000,
         reason: 'Regularized with approved medical certificate',
-        approvedBy: 'Ayesha Khan (HR Admin)'
+        approvedBy: 'HR Administration'
       }
     ] : []
 
@@ -1785,7 +1792,7 @@ export const reportDataFetcher = {
       percentageChange: `${r.percentageChange}%`,
       effectiveDate: r.effectiveDate,
       proposedBy: r.proposedBy,
-      approvedBy: r.approvedBy || 'Tariq Mehmood (Super Admin)'
+      approvedBy: r.approvedBy || 'Super Admin Authority'
     }))
 
     return {
@@ -1800,17 +1807,18 @@ export const reportDataFetcher = {
   },
 
   'RPT-PAY-007': (_filters, _user) => {
+    const emps = employeeService.getEmployees() || []
     const rows = isTest ? [
       {
         movementId: 'PRM-2026-001',
-        employeeId: 'EMP-004',
-        employeeName: 'Zainab Fatima',
-        department: 'Development',
+        employeeId: emps[1]?.id || 'EMP-004',
+        employeeName: emps[1]?.name || 'Technical Staff',
+        department: emps[1]?.department || 'Development',
         previousDesignation: 'Frontend Developer',
         newDesignation: 'Senior Frontend Developer',
         effectiveDate: '2026-07-01',
         linkedSalaryRevision: '+13.5% Increment',
-        authorizedBy: 'Tariq Mehmood (Super Admin)'
+        authorizedBy: 'Super Admin Authority'
       }
     ] : []
 
@@ -2135,7 +2143,7 @@ export const reportDataFetcher = {
         amount: Number(a.amount || 0),
         taxableStatus: a.isTaxable ? 'Taxable' : 'Tax Exempt',
         payPeriod: 'November 2026',
-        approvedBy: a.assignedBy || a.approvedBy || 'Tariq Mehmood (Super Admin)'
+        approvedBy: a.assignedBy || a.approvedBy || 'Super Admin Authority'
       }
     })
 
@@ -2187,18 +2195,34 @@ export const reportDataFetcher = {
 
   'RPT-BEN-005': (filters, user) => {
     const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
-    const loans = loanService.getLoans() || []
-    const rows = loans.map((l) => {
-      const e = staff.find((s) => s.id === l.employeeId) || employeeService.getEmployeeById(l.employeeId) || { name: l.employeeName }
+    const staffIds = new Set(staff.map((s) => s.id))
+    const allLoans = loanService.getLoans() || []
+
+    // Strict GAAP & Financial Ledger Rule:
+    // Only genuinely DISBURSED / ACTIVE / REPAID / CLOSED loans belong on the Employee Loan Ledger.
+    // Strictly exclude PENDING, APPLIED, REJECTED, and CANCELLED loan requests.
+    const eligibleLoans = allLoans.filter((l) => {
+      const s = String(l.status || '').toUpperCase()
+      const isDisbursed = s === 'ACTIVE' || s === 'DISBURSED' || s === 'REPAID' || s === 'CLOSED'
+      if (!isDisbursed) return false
+      if (staff.length > 0 && !staffIds.has(l.employeeId) && !staffIds.has(l.employeeCode)) return false
+      return true
+    })
+
+    const rows = eligibleLoans.map((l) => {
+      const e = staff.find((s) => s.id === l.employeeId || s.employeeCode === l.employeeId) ||
+                employeeService.getEmployeeById(l.employeeId) ||
+                { name: l.employeeName }
       const principal = Number(l.principalAmount || 0)
       const recovered = Number(l.totalRecovered ?? l.repaidAmount ?? 0)
       const installment = Number(l.installmentAmount || l.monthlyInstallment || 0)
-      const balance = principal - recovered
+      const balance = Number(l.outstandingBalance ?? Math.max(0, principal - recovered))
+      const empName = l.employeeName || e?.name || l.employeeId
 
       return {
         loanId: l.id,
         employeeId: l.employeeId,
-        employeeName: e.name,
+        employeeName: empName,
         disbursementDate: l.disbursedDate || l.disbursementDate || '2026-11-01',
         principalAmount: principal,
         monthlyInstallment: installment,
@@ -2208,23 +2232,38 @@ export const reportDataFetcher = {
       }
     })
 
+    const totalPrincipal = rows.reduce((acc, r) => acc + r.principalAmount, 0)
+    const totalRecovered = rows.reduce((acc, r) => acc + r.totalRecovered, 0)
+    const totalOutstanding = rows.reduce((acc, r) => acc + r.outstandingBalance, 0)
+    const isReconciled = Math.abs(totalPrincipal - totalRecovered - totalOutstanding) < 0.01
+
     return {
       rows,
       summary: {
-        totalPrincipalDisbursed: rows.reduce((acc, r) => acc + r.principalAmount, 0),
-        totalRecovered: rows.reduce((acc, r) => acc + r.totalRecovered, 0),
-        totalOutstandingBalance: rows.reduce((acc, r) => acc + r.outstandingBalance, 0)
+        totalPrincipalDisbursed: totalPrincipal,
+        totalRecovered: totalRecovered,
+        totalOutstandingBalance: totalOutstanding
       },
       reconciliation: {
-        balanceCalculated: rows.reduce((acc, r) => acc + (r.principalAmount - r.totalRecovered), 0),
-        reconciled: true
+        balanceCalculated: totalPrincipal - totalRecovered,
+        balanceRecorded: totalOutstanding,
+        reconciled: isReconciled
       }
     }
   },
 
-  'RPT-BEN-006': (_filters, user) => {
+  'RPT-BEN-006': (filters, user) => {
+    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
+    const staffIds = new Set(staff.map((s) => s.id))
     const allLoans = loanService.getLoans({}, user)
-    const advances = allLoans.filter((l) => (l.loanType || '').toLowerCase().includes('advance'))
+    const advances = allLoans.filter((l) => {
+      const s = String(l.status || '').toUpperCase()
+      const isDisbursed = s === 'ACTIVE' || s === 'DISBURSED' || s === 'REPAID' || s === 'CLOSED'
+      if (!isDisbursed) return false
+      if (staff.length > 0 && !staffIds.has(l.employeeId) && !staffIds.has(l.employeeCode)) return false
+      return (l.loanType || '').toLowerCase().includes('advance')
+    })
+
     const targetList = advances.length > 0 ? advances : (isTest ? [
       {
         id: 'ADV-2026-001',
@@ -2238,45 +2277,76 @@ export const reportDataFetcher = {
     ] : [])
 
     const rows = targetList.map((a) => {
-      const granted = a.principalAmount || a.advanceAmount || 40000
-      const recovered = a.totalRecovered || a.recoveredAmount || 0
+      const granted = Number(a.principalAmount || a.advanceAmount || 0)
+      const recovered = Number(a.totalRecovered || a.recoveredAmount || 0)
+      const emp = staff.find((s) => s.id === a.employeeId || s.employeeCode === a.employeeId) ||
+                  employeeService.getEmployeeById(a.employeeId)
       return {
         advanceId: a.id,
         employeeId: a.employeeId,
-        employeeName: a.employeeName,
+        employeeName: a.employeeName || emp?.name || a.employeeId,
         grantDate: a.grantDate || a.disbursementDate || '2026-10-05',
         advanceAmount: granted,
         recoveredAmount: recovered,
-        unrecoveredBalance: granted - recovered,
+        unrecoveredBalance: Math.max(0, granted - recovered),
         targetRecoveryRun: a.targetPayRun || 'October 2026',
         status: a.status || 'Active'
       }
     })
 
+    const totalAdvancesGranted = rows.reduce((acc, r) => acc + r.advanceAmount, 0)
+    const totalAdvancesRecovered = rows.reduce((acc, r) => acc + r.recoveredAmount, 0)
+    const totalAdvancesOutstanding = rows.reduce((acc, r) => acc + r.unrecoveredBalance, 0)
+
     return {
       rows,
       summary: {
-        totalAdvancesGranted: rows.reduce((acc, r) => acc + r.advanceAmount, 0),
-        totalAdvancesRecovered: rows.reduce((acc, r) => acc + r.recoveredAmount, 0),
-        totalAdvancesOutstanding: rows.reduce((acc, r) => acc + r.unrecoveredBalance, 0)
+        totalAdvancesGranted,
+        totalAdvancesRecovered,
+        totalAdvancesOutstanding
       },
-      reconciliation: { reconciled: true }
+      reconciliation: {
+        totalGranted: totalAdvancesGranted,
+        totalRecovered: totalAdvancesRecovered,
+        totalOutstanding: totalAdvancesOutstanding,
+        reconciled: Math.abs(totalAdvancesGranted - totalAdvancesRecovered - totalAdvancesOutstanding) < 0.01
+      }
     }
   },
 
-  'RPT-BEN-007': (_filters, _user) => {
-    const loans = loanService.getLoans() || []
-    const rows = loans.map((l) => {
-      const emp = employeeService.getEmployeeById(l.employeeId)
+  'RPT-BEN-007': (filters, user) => {
+    const staff = getScopedEmployees(user, filters?.employeeId, filters?.departmentId, filters?.status)
+    const staffIds = new Set(staff.map((s) => s.id))
+    const allLoans = loanService.getLoans() || []
+    const targetPeriod = filters?.period || '2026-11'
+
+    // Strict Rule: Only ACTIVE / DISBURSED loans with outstanding balance qualify for monthly installment deduction tracking.
+    // Strictly exclude PENDING, REJECTED, and CANCELLED loans.
+    const activeLoans = allLoans.filter((l) => {
+      const s = String(l.status || '').toUpperCase()
+      if (s !== 'ACTIVE' && s !== 'DISBURSED') return false
+      if (Number(l.outstandingBalance || 0) <= 0) return false
+      if (staff.length > 0 && !staffIds.has(l.employeeId) && !staffIds.has(l.employeeCode)) return false
+
+      // Verify repayment start month vs target period
+      const startMonth = l.repaymentStartMonth || (l.disbursementDate ? String(l.disbursementDate).slice(0, 7) : null)
+      if (startMonth && startMonth > targetPeriod) return false
+      return true
+    })
+
+    const rows = activeLoans.map((l) => {
+      const emp = staff.find((s) => s.id === l.employeeId || s.employeeCode === l.employeeId) ||
+                  employeeService.getEmployeeById(l.employeeId)
+      const empName = l.employeeName || emp?.name || l.employeeId
       const due = Number(l.installmentAmount || l.monthlyInstallment || 3000)
       const recovered = Number(l.installmentsPaid ? (l.installmentsPaid * due) : 0)
       const variance = recovered - due
 
       return {
         employeeId: l.employeeId,
-        employeeName: emp?.name || l.employeeName || l.employeeId,
+        employeeName: empName,
         loanRef: l.id,
-        payPeriod: 'November 2026',
+        payPeriod: targetPeriod === '2026-12' ? 'December 2026' : 'November 2026',
         installmentDue: due,
         payrollRecovered: recovered,
         variance,
@@ -2284,14 +2354,23 @@ export const reportDataFetcher = {
       }
     })
 
+    const totalDue = rows.reduce((acc, r) => acc + r.installmentDue, 0)
+    const totalRecovered = rows.reduce((acc, r) => acc + r.payrollRecovered, 0)
+    const netVariance = rows.reduce((acc, r) => acc + r.variance, 0)
+
     return {
       rows,
       summary: {
-        totalDue: rows.reduce((acc, r) => acc + r.installmentDue, 0),
-        totalRecovered: rows.reduce((acc, r) => acc + r.payrollRecovered, 0),
-        netVariance: rows.reduce((acc, r) => acc + r.variance, 0)
+        totalDue,
+        totalRecovered,
+        netVariance
       },
-      reconciliation: { reconciled: true }
+      reconciliation: {
+        totalDue,
+        totalRecovered,
+        netVariance,
+        reconciled: rows.every((r) => r.variance === (r.payrollRecovered - r.installmentDue))
+      }
     }
   },
 
@@ -2311,7 +2390,7 @@ export const reportDataFetcher = {
         dueDate: t.dueDate || '2026-10-31',
         completionDate: t.completedDate || (t.status === 'Completed' ? '2026-10-25' : '--'),
         progress: `${t.progress || 0}%`,
-        reviewer: t.reviewerName || 'Bilal Siddiqui',
+        reviewer: t.reviewerName || t.creatorName || 'Authorized Reviewer',
         status: t.status || 'In Progress'
       }
     })
@@ -2508,7 +2587,7 @@ export const reportDataFetcher = {
         preScore: 65,
         postScore: 88,
         skillGrowth: '35.4%',
-        validatedBy: 'Bilal Siddiqui (Manager)',
+        validatedBy: e.reportingManagerName || e.managerName || 'Department Manager',
         status: 'Advanced'
       }
     })
@@ -2539,7 +2618,7 @@ export const reportDataFetcher = {
       effectiveTo: p.effectiveTo || '2027-12-31',
       scope: p.scope || 'Company-Wide',
       coveredStaff: staffCount,
-      approvedBy: p.createdBy || 'Tariq Mehmood (Super Admin)'
+      approvedBy: p.createdBy || 'Super Admin Authority'
     }))
 
     return {
@@ -2562,7 +2641,7 @@ export const reportDataFetcher = {
         newRule: '40 Hours / 5 Days',
         changeDate: '2026-06-01',
         reason: 'Transition to modern 5-day professional software workweek',
-        actor: 'Tariq Mehmood (Super Admin)'
+        actor: 'Super Admin Authority'
       }
     ] : []
 
@@ -2582,7 +2661,7 @@ export const reportDataFetcher = {
 
     const reviewerMap = new Map()
     approvedLeaves.forEach((r) => {
-      const reviewer = r.decidedBy || r.currentApproverName || 'Tariq Mehmood (Super Admin)'
+      const reviewer = r.decidedBy || r.currentApproverName || 'Super Admin Authority'
       const days = Number(r.eligibleWorkingDays || r.calculatedDays || r.days || 1.0)
       if (!reviewerMap.has(reviewer)) {
         reviewerMap.set(reviewer, {
@@ -2597,8 +2676,8 @@ export const reportDataFetcher = {
     })
 
     if (reviewerMap.size === 0) {
-      reviewerMap.set('Tariq Mehmood (Super Admin)', {
-        reviewerName: 'Tariq Mehmood (Super Admin)',
+      reviewerMap.set('Super Admin Authority', {
+        reviewerName: 'Super Admin Authority',
         leaveDaysApproved: 1,
         monthlyLeaveCap: 15,
         lateExceptionsGranted: 1,
@@ -2626,8 +2705,8 @@ export const reportDataFetcher = {
     const rows = isTest ? [
       {
         delegationId: 'DEL-2026-001',
-        delegator: 'Bilal Siddiqui (Manager)',
-        delegatee: 'Usman Ghani (Senior Dev)',
+        delegator: 'Department Manager',
+        delegatee: 'Senior Staff Specialist',
         scope: 'Task & Attendance Review',
         approvalCap: 50000,
         startDate: '2026-10-01',
@@ -2652,9 +2731,9 @@ export const reportDataFetcher = {
       {
         auditRef: 'AUD-REV-001',
         itemType: 'Salary Increment (+13.5%)',
-        employeeName: 'Zainab Fatima',
+        employeeName: 'Technical Staff Specialist',
         proposedValue: 210000,
-        proposer: 'Ayesha Khan (HR Admin)',
+        proposer: 'HR Administration',
         approvalTier: 'Super Admin Final Approval',
         decision: 'Approved',
         decisionDate: '2026-10-20'
@@ -2732,7 +2811,7 @@ export const reportDataFetcher = {
     const tickets = helpDeskService.getTickets({}, safeUser)
     const rows = tickets.length > 0 || isTest ? [
       {
-        resolverName: 'Ayesha Khan (HR Admin)',
+        resolverName: 'HR Administration',
         assignedCount: tickets.length,
         resolvedCount: tickets.filter((t) => t.status === 'Resolved' || t.status === 'Closed').length,
         reopenedCount: 0,
@@ -2979,7 +3058,7 @@ export const reportDataFetcher = {
       templateType: l.letterType || l.subject || 'Employment Letter',
       templateVersion: l.templateVersion || '1.0',
       issueDate: l.issuedAt?.slice(0, 10) || l.effectiveDate || '2026-10-15',
-      signatory: l.signatoryName || 'Tariq Mehmood (Managing Director)',
+      signatory: l.signatoryName || 'Executive Authority',
       status: l.status || 'Issued'
     }))
 
@@ -3002,7 +3081,7 @@ export const reportDataFetcher = {
       employeeName: r.employeeName,
       letterType: r.letterType || r.subject || 'Experience Certificate',
       requestDate: r.effectiveDate || '2026-10-22',
-      assignedReviewer: r.preparedBy || 'Ayesha Khan (HR Admin)',
+      assignedReviewer: r.preparedBy || 'HR Administration',
       turnaroundDays: 2,
       status: r.status || 'Issued'
     }))
