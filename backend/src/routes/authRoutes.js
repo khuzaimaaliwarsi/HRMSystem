@@ -64,7 +64,7 @@ router.post('/refresh', authRateLimiter, async (req, res, next) => {
     const rawRefreshToken = req.body.refreshToken || req.cookies?.refresh_token
 
     if (!rawRefreshToken) {
-      return sendError(res, 'Refresh token is required', 'TOKEN_MISSING', null, 400)
+      return sendError(res, 'Refresh token is required', 'TOKEN_MISSING', null, 401)
     }
 
     const reqMeta = {

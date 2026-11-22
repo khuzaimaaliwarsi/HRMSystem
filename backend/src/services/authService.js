@@ -71,13 +71,22 @@ export const authService = {
       throw error
     }
 
-    // Lookup user by username, email, linked employee ID/code, or employee name
+    // Lookup user by username, email, linked employee ID/code, employee name, or displayName
     const cleanId = identifier.trim()
     const nameParts = cleanId.split(/\s+/)
+    const noSpacesId = cleanId.replace(/\s+/g, '')
+    const underscoreId = cleanId.replace(/\s+/g, '_')
+    const hyphenId = cleanId.replace(/\s+/g, '-')
+
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           { username: { equals: cleanId, mode: 'insensitive' } },
+          { username: { equals: noSpacesId, mode: 'insensitive' } },
+          { username: { equals: underscoreId, mode: 'insensitive' } },
+          { username: { equals: hyphenId, mode: 'insensitive' } },
+          { displayName: { equals: cleanId, mode: 'insensitive' } },
+          { displayName: { contains: cleanId, mode: 'insensitive' } },
           { email: { equals: cleanId.toLowerCase(), mode: 'insensitive' } },
           { employee: { employeeCode: { equals: cleanId, mode: 'insensitive' } } },
           { employee: { id: cleanId } },

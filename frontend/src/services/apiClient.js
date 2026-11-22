@@ -78,6 +78,7 @@ async function request(endpoint, options = {}, isRetry = false) {
     endpoint.includes('/auth/login') ||
     endpoint.includes('/auth/refresh') ||
     endpoint.includes('/auth/logout') ||
+    endpoint.includes('/auth/me') ||
     endpoint.includes('/auth/bootstrap-admin')
 
   const headers = {
