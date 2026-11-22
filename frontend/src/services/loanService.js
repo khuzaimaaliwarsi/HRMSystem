@@ -12,6 +12,14 @@ import { INITIAL_LOANS } from '../mocks/payrollData.js'
 
 const STORAGE_KEY = 'isysware_hrms_f06_loans_v1'
 
+// Only source-specific approval timestamps can be called approval dates.
+// updatedAt is a generic last-modified timestamp, not an approval audit event.
+const dateOnlyOrNull = (value) => {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10)
+}
+
 export function generateLoanSchedule(loan) {
   const principal = Number(loan.principalAmount || 0)
   const totalInstallments = Number(loan.totalInstallments || loan.repaymentMonths || loan.tenureMonths || (principal > 0 && Number(loan.installmentAmount || loan.monthlyInstallment) > 0 ? Math.round(principal / Number(loan.installmentAmount || loan.monthlyInstallment)) : 1))
@@ -26,12 +34,12 @@ export function generateLoanSchedule(loan) {
         : repayments.length
   
   const disbDate = loan.disbursementDate || loan.disbursedDate
-  let startMonthStr = loan.repaymentStartMonth || (disbDate ? String(disbDate).slice(0, 7) : '2026-11')
-  
+  const startMonthStr = loan.repaymentStartMonth || (disbDate ? String(disbDate).slice(0, 7) : null)
+  // Do not fabricate a November 2026 schedule when source dates are missing.
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(startMonthStr || ''))) return []
+
   const schedule = []
-  const [startYear, startMonth] = (startMonthStr && startMonthStr.includes('-'))
-    ? startMonthStr.split('-').map(Number)
-    : [2026, 11]
+  const [startYear, startMonth] = startMonthStr.split('-').map(Number)
   let remaining = principal
 
   for (let i = 0; i < totalInstallments; i++) {
@@ -67,9 +75,11 @@ export function generateLoanSchedule(loan) {
 export function mapBackendLoan(l) {
   const empCode = l.employee?.employeeCode || (typeof l.employeeId === 'string' && l.employeeId.startsWith('EMP-') ? l.employeeId : undefined)
   const empId = empCode || l.employee?.id || l.employeeId
-  const disbDate = l.disbursementDate
-    ? new Date(l.disbursementDate).toISOString().slice(0, 10)
-    : (l.disbursedDate ? new Date(l.disbursedDate).toISOString().slice(0, 10) : null)
+  const disbDate = dateOnlyOrNull(l.disbursementDate || l.disbursedAt || l.disbursedDate)
+  const approvedDate = dateOnlyOrNull(l.approvedAt || l.approvedDate || l.approvalDate)
+  const approvedBy = (typeof l.approvedBy === 'string' && l.approvedBy.trim())
+    ? l.approvedBy
+    : (l.approvedBy?.displayName || l.approvedBy?.name || l.approvedByName || null)
 
   const principalAmount = Number(l.principalAmount || 0)
   const totalInstallments = Number(l.repaymentMonths || l.tenureMonths || l.totalInstallments || (principalAmount > 0 && Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount) > 0 ? Math.round(principalAmount / Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount)) : 1))
@@ -131,8 +141,8 @@ export function mapBackendLoan(l) {
       : l.status,
     reason: l.remarks || l.reason || '',
     appliedDate: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 10) : (l.appliedDate || new Date().toISOString().slice(0, 10)),
-    approvedBy: l.approvedBy || (l.approvedById ? 'Super Admin' : null),
-    approvedDate: l.approvedDate || (l.updatedAt ? new Date(l.updatedAt).toISOString().slice(0, 10) : null),
+    approvedBy,
+    approvedDate,
     rawBackend: l
   }
 

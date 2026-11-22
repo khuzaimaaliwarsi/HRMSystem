@@ -29,6 +29,10 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
     : 'N/A'
 
   const repayments = Array.isArray(loan.repayments) ? loan.repayments : []
+  const approvalDate = loan.approvedDate || null
+  const isDisbursed = ['ACTIVE', 'DISBURSED', 'CLOSED', 'REPAID'].includes(String(loan.status || '').toUpperCase())
+  const missingApprovalProof = isDisbursed && !approvalDate
+  const disbursementBeforeApproval = Boolean(approvalDate && disbDateStr && String(disbDateStr).slice(0, 10) < String(approvalDate).slice(0, 10))
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overscroll-contain animate-in fade-in duration-150">
@@ -65,13 +69,21 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
               <span className="text-xs font-bold text-slate-600">Current Status:</span>
               <StatusBadge status={loan.status === 'PENDING' ? 'Pending Super Admin Review' : loan.status} />
             </div>
-            {loan.approvedBy && (
+            {(loan.approvedBy || approvalDate) && (
               <div className="text-xs text-slate-500 font-medium">
-                Approved by <span className="font-semibold text-slate-700">{loan.approvedBy}</span>
-                {loan.approvedDate && <span> on {loan.approvedDate}</span>}
+                Approval: <span className="font-semibold text-slate-700">{loan.approvedBy || 'Approver not recorded'}</span>
+                {approvalDate && <span> on {approvalDate}</span>}
+                {!approvalDate && <span> (date not recorded)</span>}
               </div>
             )}
           </div>
+          {(missingApprovalProof || disbursementBeforeApproval) && (
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              {disbursementBeforeApproval
+                ? 'Audit check required: Recorded disbursement date precedes the recorded approval date. Verify original approval and payment events; existing data has not been changed.'
+                : 'Approval date not available from the source record. Last-modified date is not proof of approval; verify the backend audit trail.'}
+            </div>
+          )}
 
           {/* 4 Financial KPI Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -137,6 +149,9 @@ export default function LoanDetailsModal({ isOpen, onClose, loan }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                  {schedule.length === 0 && (
+                    <tr><td colSpan={6} className="px-3.5 py-4 text-center font-sans text-amber-800">Repayment schedule unavailable: verified start month or disbursement date required.</td></tr>
+                  )}
                   {schedule.map((item) => {
                     const isPaid = item.status === 'PAID'
                     return (
