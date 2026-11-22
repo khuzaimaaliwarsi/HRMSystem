@@ -16,14 +16,14 @@ export function BrandLogo({
   const sizeClasses = {
     xs: 'w-6 h-6',
     sm: 'w-8 h-8',
-    md: 'w-9 h-9',
-    lg: 'w-12 h-12',
-    xl: 'w-14 h-14',
-    '2xl': 'w-16 h-16'
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
+    xl: 'w-20 h-20',
+    '2xl': 'w-24 h-24'
   }
 
   const baseClasses = cn(
-    'rounded-full overflow-hidden select-none flex items-center justify-center shrink-0 shadow-md shadow-blue-900/30 border border-blue-400/30 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none select-none bg-[#0a1835]',
+    'rounded-full overflow-hidden select-none flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/40 ring-1 ring-white/25 bg-[#001138]',
     sizeClasses[size] || sizeClasses.md,
     onClick && 'cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none active:outline-none',
     className
@@ -33,7 +33,8 @@ export function BrandLogo({
     <img
       src="/logo.png"
       alt={ariaLabel}
-      className="w-full h-full object-cover rounded-full select-none pointer-events-none"
+      className="w-full h-full object-cover rounded-full select-none pointer-events-none drop-shadow-sm"
+      style={{ imageRendering: '-webkit-optimize-contrast' }}
       draggable={false}
     />
   )

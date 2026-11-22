@@ -31,15 +31,15 @@
     padding: 0;
   }
 
-  /* Desktop 80% Scale Density: Renders the entire software in ultra-compact VIP 80% scale on 100% screen */
+  /* Standard 100% Scale Density: Normal enterprise software viewport sizing */
   @media (min-width: 768px) {
     html {
-      zoom: 0.8;
+      zoom: 1;
     }
 
     body,
     #root {
-      min-height: 125vh;
+      min-height: 100vh;
     }
   }
 
