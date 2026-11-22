@@ -56,10 +56,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-hrms-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-hrms-accent-light selection:text-hrms-primary">
+    <div className="min-h-[111.12vh] bg-hrms-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-hrms-accent-light selection:text-hrms-primary">
       {/* Top Branding Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <BrandLogo size="xl" className="mx-auto mb-4" />
+        <BrandLogo size="2xl" className="mx-auto mb-4 w-24 h-24" />
         <h1 className="text-2xl sm:text-3xl font-extrabold text-hrms-primary tracking-tight">
           iSysware <span className="text-hrms-accent">HRMS</span>
         </h1>
