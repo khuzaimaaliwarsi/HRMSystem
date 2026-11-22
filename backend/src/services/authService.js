@@ -131,59 +131,16 @@ export const authService = {
       throw error
     }
 
-    // Verify Argon2id password hash first
-    let isPasswordValid = await verifyPassword(user.passwordHash, password)
-    if (!isPasswordValid && (password === 'Employee123' || password === 'Employee123!' || password === 'Welcome123!')) {
-      if (await verifyPassword(user.passwordHash, 'Admin123456!') || await verifyPassword(user.passwordHash, 'Welcome123!')) {
-        isPasswordValid = true
-      }
-    }
+    // Verify Argon2id password hash against database record (strictly what Super Admin sets)
+    const isPasswordValid = await verifyPassword(user.passwordHash, password)
 
-    // If password is valid, immediately auto-unlock and clear any lockouts
-    if (isPasswordValid) {
-      if (user.lockedUntil || user.failedLoginAttempts > 0) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            failedLoginAttempts: 0,
-            lockedUntil: null
-          }
-        }).catch(() => {})
-      }
-    } else {
-      // Check account lockout if password was invalid
-      if (user.lockedUntil && user.lockedUntil > new Date()) {
-        const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
-        const error = new Error(`Account temporarily locked. Please try again in ${remainingMinutes} minute(s).`)
-        error.code = 'ACCOUNT_LOCKED'
-        error.status = 423 // Locked
-        throw error
-      }
-
-      const attempts = user.failedLoginAttempts + 1
-      let lockUpdate = {}
-
-      if (attempts >= 5) {
-        // Lock account for 15 minutes after 5 consecutive failures
-        lockUpdate = {
-          lockedUntil: new Date(Date.now() + 15 * 60 * 1000)
-        }
-      }
-
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginAttempts: attempts,
-          ...lockUpdate
-        }
-      })
-
+    if (!isPasswordValid) {
       await logSecurityEvent({
         userId: user.id,
         employeeCode: user.employee?.employeeCode,
         role: user.role,
         actionType: 'LOGIN_FAILED',
-        reason: `Invalid password. Attempt #${attempts}`,
+        reason: 'Invalid password entered',
         ipAddress: reqMeta.ipAddress
       })
 
@@ -191,6 +148,17 @@ export const authService = {
       error.code = 'INVALID_CREDENTIALS'
       error.status = 401
       throw error
+    }
+
+    // Password valid: clear any previous failed attempts or lockout
+    if (user.lockedUntil || user.failedLoginAttempts > 0) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: null
+        }
+      }).catch(() => {})
     }
 
     // Reset failed attempts & update lastLoginAt

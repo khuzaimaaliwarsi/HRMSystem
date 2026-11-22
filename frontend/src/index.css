@@ -31,15 +31,15 @@
     padding: 0;
   }
 
-  /* Desktop 110% Scale Density: Renders the entire software in clear 110% scale per user specification */
+  /* Desktop 80% Scale Density: Renders the entire software in ultra-compact VIP 80% scale on 100% screen */
   @media (min-width: 768px) {
     html {
-      zoom: 1.1;
+      zoom: 0.8;
     }
 
     body,
     #root {
-      min-height: 100vh;
+      min-height: 125vh;
     }
   }
 
