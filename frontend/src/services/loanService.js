@@ -12,10 +12,72 @@ import { INITIAL_LOANS } from '../mocks/payrollData.js'
 
 const STORAGE_KEY = 'isysware_hrms_f06_loans_v1'
 
+export function generateLoanSchedule(loan) {
+  const principal = Number(loan.principalAmount || 0)
+  const totalInstallments = Number(loan.totalInstallments || loan.repaymentMonths || loan.tenureMonths || (principal > 0 && Number(loan.installmentAmount || loan.monthlyInstallment) > 0 ? Math.round(principal / Number(loan.installmentAmount || loan.monthlyInstallment)) : 1))
+  const installmentAmount = Number(loan.installmentAmount || loan.monthlyInstallment || (totalInstallments > 0 ? Math.round(principal / totalInstallments) : 0))
+  const repayments = Array.isArray(loan.repayments) ? loan.repayments : []
+  const installmentsPaid = Number(loan.installmentsPaid || loan.paidInstallments || loan.paidInstallmentsCount || repayments.length || 0)
+  
+  const disbDate = loan.disbursementDate || loan.disbursedDate
+  let startMonthStr = loan.repaymentStartMonth || (disbDate ? String(disbDate).slice(0, 7) : '2026-11')
+  
+  const schedule = []
+  const [startYear, startMonth] = (startMonthStr && startMonthStr.includes('-'))
+    ? startMonthStr.split('-').map(Number)
+    : [2026, 11]
+  let remaining = principal
+
+  for (let i = 0; i < totalInstallments; i++) {
+    const d = new Date(Date.UTC(startYear, startMonth - 1 + i, 1))
+    const periodCode = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+    const dueMonthName = d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    const dueDate = `${periodCode}-28`
+    const amt = Math.min(remaining, installmentAmount)
+    remaining = Math.max(0, remaining - amt)
+    
+    // Check if this installment has been repaid
+    const isPaid = i < installmentsPaid || repayments.some((r) => {
+      const rPeriod = r.period || (r.repaymentDate ? String(r.repaymentDate).slice(0, 7) : null)
+      return rPeriod === periodCode
+    })
+
+    schedule.push({
+      installmentNumber: i + 1,
+      periodCode,
+      dueMonthName,
+      dueDate,
+      amount: amt,
+      balanceAfter: remaining,
+      status: isPaid ? 'PAID' : 'PENDING',
+      paymentSource: 'Payroll Deduction'
+    })
+  }
+
+  return schedule
+}
+
 export function mapBackendLoan(l) {
   const empCode = l.employee?.employeeCode || (typeof l.employeeId === 'string' && l.employeeId.startsWith('EMP-') ? l.employeeId : undefined)
   const empId = empCode || l.employee?.id || l.employeeId
-  return {
+  const disbDate = l.disbursementDate
+    ? new Date(l.disbursementDate).toISOString().slice(0, 10)
+    : (l.disbursedDate ? new Date(l.disbursedDate).toISOString().slice(0, 10) : null)
+
+  const principalAmount = Number(l.principalAmount || 0)
+  const totalInstallments = Number(l.repaymentMonths || l.tenureMonths || l.totalInstallments || (principalAmount > 0 && Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount) > 0 ? Math.round(principalAmount / Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount)) : 1))
+  const installmentAmount = Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount || (totalInstallments > 0 ? Math.round(principalAmount / totalInstallments) : 0))
+  const repayments = Array.isArray(l.repayments) ? l.repayments : []
+  const installmentsPaid = Number(l.paidInstallments || l.installmentsPaid || repayments.length || 0)
+  const repaidAmount = Number(l.totalRepaidAmount || l.totalRepaid || l.repaidAmount || repayments.reduce((s, r) => s + Number(r.amount || 0), 0))
+  const outstandingBalance = Number(l.remainingBalance ?? l.outstandingBalance ?? Math.max(0, principalAmount - repaidAmount))
+
+  let repaymentStartMonth = l.repaymentStartMonth || l.repaymentStartDate ? String(l.repaymentStartMonth || l.repaymentStartDate).slice(0, 7) : null
+  if (!repaymentStartMonth && disbDate) {
+    repaymentStartMonth = disbDate.slice(0, 7)
+  }
+
+  const baseLoan = {
     id: l.loanNumber || l.id,
     cuid: l.id,
     loanNumber: l.loanNumber || l.id,
@@ -28,12 +90,16 @@ export function mapBackendLoan(l) {
       : l.loanType === 'EMERGENCY_LOAN' ? 'Emergency Loan'
       : l.loanType === 'EDUCATION_LOAN' ? 'Education Loan'
       : (l.loanType ? String(l.loanType).replace(/_/g, ' ') : 'Personal Loan'),
-    principalAmount: Number(l.principalAmount || 0),
-    installmentAmount: Number(l.monthlyInstallment || l.monthlyDeduction || l.installmentAmount || 0),
-    totalInstallments: Number(l.repaymentMonths || l.totalInstallments || 1),
-    installmentsPaid: Number(l.paidInstallments || l.installmentsPaid || (l.repayments ? l.repayments.length : 0)),
-    repaidAmount: Number(l.totalRepaidAmount || l.totalRepaid || l.repaidAmount || 0),
-    outstandingBalance: Number(l.remainingBalance || l.outstandingBalance || l.principalAmount || 0),
+    principalAmount,
+    installmentAmount,
+    totalInstallments,
+    installmentsPaid,
+    repaidAmount,
+    outstandingBalance,
+    disbursementDate: disbDate,
+    disbursedDate: disbDate,
+    repaymentStartMonth,
+    repayments,
     status: l.status === 'PENDING' ? 'Pending Super Admin Review'
       : l.status === 'APPROVED' ? 'Approved'
       : l.status === 'DISBURSED' ? 'Active'
@@ -44,7 +110,19 @@ export function mapBackendLoan(l) {
       : l.status,
     reason: l.remarks || l.reason || '',
     appliedDate: l.createdAt ? new Date(l.createdAt).toISOString().slice(0, 10) : (l.appliedDate || new Date().toISOString().slice(0, 10)),
+    approvedBy: l.approvedBy || (l.approvedById ? 'Super Admin' : null),
+    approvedDate: l.approvedDate || (l.updatedAt ? new Date(l.updatedAt).toISOString().slice(0, 10) : null),
     rawBackend: l
+  }
+
+  const schedule = generateLoanSchedule(baseLoan)
+  const nextUnpaid = schedule.find((s) => s.status !== 'PAID')
+  const nextDeductionPeriod = l.nextDeductionPeriod || nextUnpaid?.periodCode || repaymentStartMonth
+
+  return {
+    ...baseLoan,
+    schedule,
+    nextDeductionPeriod
   }
 }
 
@@ -364,6 +442,14 @@ class LoanService {
       activeLoanCount: activeLoans.length,
       loanDeductions
     }
+  }
+
+  generateLoanSchedule(loan) {
+    return generateLoanSchedule(loan)
+  }
+
+  mapBackendLoan(l) {
+    return mapBackendLoan(l)
   }
 }
 

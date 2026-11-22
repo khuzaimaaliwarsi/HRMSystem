@@ -454,6 +454,8 @@ export const INITIAL_LOANS = [
     loanType: 'Company Personal Loan',
     principalAmount: 9000,
     disbursedDate: '2026-11-01',
+    disbursementDate: '2026-11-01',
+    repaymentStartMonth: '2026-11',
     totalInstallments: 3,
     installmentAmount: 3000,
     installmentsPaid: 0,

@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useState } from 'react'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import StatusBadge from '@/components/common/StatusBadge'
+import LoanDetailsModal from './LoanDetailsModal'
 
 export function LoanManagementTable({
   loans = [],
@@ -12,6 +13,8 @@ export function LoanManagementTable({
   canApply = true,
   currentUser = null
 }) {
+  const [selectedLoanForDetails, setSelectedLoanForDetails] = useState(null)
+
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden text-left">
       <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
@@ -47,15 +50,15 @@ export function LoanManagementTable({
         <table className="w-full text-left text-xs text-slate-600">
           <thead className="bg-slate-50 text-[10px] font-extrabold uppercase text-slate-500 tracking-wider border-b border-slate-200">
             <tr>
-              <th className="px-4 py-3">Employee</th>
+              <th className="px-4 py-3">Employee &amp; Dates</th>
               <th className="px-4 py-3">Loan Category</th>
               <th className="px-4 py-3 text-right">Principal</th>
               <th className="px-4 py-3 text-right">Monthly Installment</th>
-              <th className="px-4 py-3 text-center">Tenure / Paid</th>
+              <th className="px-4 py-3 text-center">Tenure / Schedule</th>
               <th className="px-4 py-3 text-right text-emerald-700">Repaid Total</th>
               <th className="px-4 py-3 text-right text-rose-700 font-bold">Outstanding Balance</th>
               <th className="px-4 py-3">Status</th>
-              {canApprove && <th className="px-4 py-3 text-right">Actions</th>}
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-mono">
@@ -64,12 +67,28 @@ export function LoanManagementTable({
               const isSelf = currentUser && (currentUser.employeeId === l.employeeId || currentUser.id === l.employeeId || currentUser.employeeId === l.employeeCode)
               const blockSelf = isSelf && !isSuperAdmin
               const isPending = l.status === 'Pending Super Admin Review' || l.status === 'PENDING' || l.status === 'APPLIED'
+              const disbDateStr = l.disbursedDate || l.disbursementDate
+              const formattedDisbDate = disbDateStr
+                ? new Date(disbDateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                : null
 
               return (
                 <tr key={l.cuid || l.loanNumber || l.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="px-4 py-3 font-sans">
                     <div className="font-bold text-slate-900">{l.employeeName}</div>
                     <div className="text-[10px] text-slate-400 font-mono">{l.employeeCode || l.employeeId} • {l.loanNumber || l.id}</div>
+                    <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                      {formattedDisbDate ? (
+                        <span className="font-semibold text-navy-900 bg-navy-50 px-1.5 py-0.2 rounded border border-navy-200">
+                          Disbursed: {formattedDisbDate}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">Pending Disbursement</span>
+                      )}
+                      {l.repaymentStartMonth && (
+                        <span className="text-slate-500 font-mono text-[9.5px]">• Start: {l.repaymentStartMonth}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 font-sans">
                     <span className="font-semibold text-slate-800">{l.loanType}</span>
@@ -86,6 +105,11 @@ export function LoanManagementTable({
                   <td className="px-4 py-3 text-center font-sans">
                     <span className="font-bold text-slate-800">{l.installmentsPaid || 0}</span>
                     <span className="text-slate-400"> / {l.totalInstallments} months</span>
+                    {l.nextDeductionPeriod && (l.status === 'Active' || l.status === 'DISBURSED') && (
+                      <div className="text-[10px] font-mono text-indigo-700 font-semibold mt-0.5">
+                        Due: {l.nextDeductionPeriod}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-emerald-700 font-medium">
                     PKR {(l.repaidAmount || 0).toLocaleString()}
@@ -96,10 +120,22 @@ export function LoanManagementTable({
                   <td className="px-4 py-3 font-sans">
                     <StatusBadge status={l.status === 'PENDING' ? 'Pending Super Admin Review' : l.status} />
                   </td>
-                  {canApprove && (
-                    <td className="px-4 py-3 text-right font-sans">
-                      {isPending && !blockSelf && (
-                        <div className="flex items-center justify-end gap-1.5">
+                  <td className="px-4 py-3 text-right font-sans">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedLoanForDetails(l)}
+                        className="text-xs text-navy-800 border-slate-300 hover:bg-slate-100 font-bold cursor-pointer whitespace-nowrap"
+                        title="View complete repayment schedule and installment details"
+                      >
+                        <AppIcon name="calendar" className="w-3.5 h-3.5 mr-1 text-navy-700" />
+                        <span>View Schedule</span>
+                      </Button>
+
+                      {canApprove && isPending && !blockSelf && (
+                        <>
                           <Button
                             type="button"
                             size="sm"
@@ -118,29 +154,23 @@ export function LoanManagementTable({
                           >
                             Decline
                           </Button>
-                        </div>
+                        </>
                       )}
 
-                      {blockSelf && isPending && (
+                      {canApprove && blockSelf && isPending && (
                         <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">
                           Self Request (No Self-Approval)
                         </span>
                       )}
-
-                      {!isPending && (
-                        <span className="text-[11px] text-slate-400">
-                          {l.approvedBy ? `Approved by ${l.approvedBy}` : 'Processed'}
-                        </span>
-                      )}
-                    </td>
-                  )}
+                    </div>
+                  </td>
                 </tr>
               )
             })}
 
             {loans.length === 0 && (
               <tr>
-                <td colSpan={canApprove ? 9 : 8} className="px-4 py-8 text-center text-slate-400 font-sans text-xs">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400 font-sans text-xs">
                   No active or historical loan records found in this scope.
                 </td>
               </tr>
@@ -148,6 +178,13 @@ export function LoanManagementTable({
           </tbody>
         </table>
       </div>
+
+      {/* Loan Details & Amortization Schedule Modal */}
+      <LoanDetailsModal
+        isOpen={Boolean(selectedLoanForDetails)}
+        onClose={() => setSelectedLoanForDetails(null)}
+        loan={selectedLoanForDetails}
+      />
     </div>
   )
 }

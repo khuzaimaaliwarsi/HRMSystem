@@ -619,3 +619,88 @@ test('Payroll Complete Workflow — 18. Reconciliation Engine Disqualifies Bad R
   const isReconciled = isNetMatched && isLoanMatched
   assert.equal(isReconciled, false, 'Must NEVER display 100% Reconciled when there is a variance')
 })
+
+test('Payroll Complete Workflow — 19. Loan Management Disbursement Date & Amortization Schedule Verification', () => {
+  // 1. Verify component files exist
+  const modalFilePath = path.join(__dirname, '../components/payroll/LoanDetailsModal.jsx')
+  const tableFilePath = path.join(__dirname, '../components/payroll/LoanManagementTable.jsx')
+  assert.ok(fs.existsSync(modalFilePath), 'LoanDetailsModal.jsx must exist')
+  assert.ok(fs.existsSync(tableFilePath), 'LoanManagementTable.jsx must exist')
+
+  const modalContent = fs.readFileSync(modalFilePath, 'utf8')
+  assert.ok(modalContent.includes('Amortization Schedule'), 'Modal must render Amortization Schedule')
+  assert.ok(modalContent.includes('Disbursement Date'), 'Modal must render Disbursement Date')
+  assert.ok(modalContent.includes('Repayment Start Month'), 'Modal must render Repayment Start Month')
+  assert.ok(modalContent.includes('Outstanding'), 'Modal must render Outstanding Balance')
+
+  const tableContent = fs.readFileSync(tableFilePath, 'utf8')
+  assert.ok(tableContent.includes('LoanDetailsModal'), 'LoanManagementTable must import LoanDetailsModal')
+  assert.ok(tableContent.includes('View Schedule'), 'LoanManagementTable must render View Schedule action button')
+  assert.ok(tableContent.includes('Disbursed:'), 'LoanManagementTable must render Disbursed date badge')
+
+  // 2. Verify loanService.generateLoanSchedule computes correct 3-month schedule
+  const sampleLoan = {
+    id: 'LN-2026-001',
+    employeeId: 'EMP-004',
+    employeeName: 'UAT Dev Manager',
+    principalAmount: 9000,
+    installmentAmount: 3000,
+    totalInstallments: 3,
+    disbursementDate: '2026-11-01',
+    repaymentStartMonth: '2026-11',
+    installmentsPaid: 1,
+    outstandingBalance: 6000,
+    repaidAmount: 3000
+  }
+
+  const schedule = loanService.generateLoanSchedule(sampleLoan)
+  assert.equal(schedule.length, 3, 'Must produce exact 3-month installment schedule')
+
+  // Month 1: 2026-11
+  assert.equal(schedule[0].periodCode, '2026-11')
+  assert.equal(schedule[0].installmentNumber, 1)
+  assert.equal(schedule[0].amount, 3000)
+  assert.equal(schedule[0].balanceAfter, 6000)
+  assert.equal(schedule[0].status, 'PAID')
+
+  // Month 2: 2026-12
+  assert.equal(schedule[1].periodCode, '2026-12')
+  assert.equal(schedule[1].installmentNumber, 2)
+  assert.equal(schedule[1].amount, 3000)
+  assert.equal(schedule[1].balanceAfter, 3000)
+  assert.equal(schedule[1].status, 'PENDING')
+
+  // Month 3: 2027-01
+  assert.equal(schedule[2].periodCode, '2027-01')
+  assert.equal(schedule[2].installmentNumber, 3)
+  assert.equal(schedule[2].amount, 3000)
+  assert.equal(schedule[2].balanceAfter, 0)
+  assert.equal(schedule[2].status, 'PENDING')
+
+  // 3. Verify loanService.mapBackendLoan maps all essential date and schedule fields
+  const rawBackendLoan = {
+    id: 'LN-BACKEND-999',
+    employeeId: 'EMP-004',
+    principalAmount: 9000,
+    installmentAmount: 3000,
+    tenureMonths: 3,
+    status: 'ACTIVE',
+    disbursementDate: '2026-11-01T00:00:00.000Z',
+    repaymentStartMonth: '2026-11',
+    nextDeductionPeriod: '2026-12',
+    approvedBy: 'Super Admin',
+    repayments: [
+      { id: 'REP-1', period: '2026-11', amount: 3000, status: 'DEDUCTED', payrollRunId: 'PAY-2026-11-02' }
+    ]
+  }
+
+  const mapped = loanService.mapBackendLoan(rawBackendLoan)
+  assert.equal(mapped.id, 'LN-BACKEND-999')
+  assert.equal(mapped.disbursementDate, '2026-11-01')
+  assert.equal(mapped.disbursedDate, '2026-11-01')
+  assert.equal(mapped.repaymentStartMonth, '2026-11')
+  assert.equal(mapped.nextDeductionPeriod, '2026-12')
+  assert.ok(Array.isArray(mapped.schedule), 'Schedule array must be generated or mapped')
+  assert.equal(mapped.schedule.length, 3, 'Auto-generated schedule must match 3 months tenure')
+})
+
