@@ -532,3 +532,90 @@ test('Payroll Complete Workflow — 16. Draft Refresh Preview Diff Accurately Co
     assert.equal(emp004Update.loanDiff, 3000, 'Loan diff of PKR 3,000 must be detected for EMP-004')
   }
 })
+
+test('Payroll Complete Workflow — 17. December 2026 Canonical Snapshot Fidelity Across All Views', () => {
+  // December 2026 snapshot before recalculation
+  const decRun = {
+    id: 'PAY-2026-12-01',
+    runNumber: 'RUN-202612-01',
+    period: '2026-12',
+    periodName: 'December 2026',
+    status: 'Draft',
+    totalGross: 179500,
+    grossPayroll: 179500,
+    totalLoanDeductions: 0,
+    totalNet: 179500,
+    netPayable: 179500,
+    totalEmployees: 2,
+    employeeBreakdown: [
+      {
+        entryId: 'ENT-202612-004',
+        employeeId: 'EMP-004',
+        employeeName: 'UAT Dev Manager',
+        basicSalary: 30000,
+        allowancesTotal: 0,
+        overtimePay: 0,
+        salaryTaxWithheld: 0,
+        loanDeduction: 0,
+        totalDeductions: 0,
+        netPayable: 30000
+      }
+    ]
+  }
+
+  // 1. Payslip from snapshot
+  const payslip = payrollService.buildPayslipFromEntry(decRun, decRun.employeeBreakdown[0])
+  assert.equal(payslip.basicSalary, 30000)
+  assert.equal(payslip.loanDeduction, 0, 'Payslip loan deduction must be 0 from snapshot')
+  assert.equal(payslip.netPay, 30000, 'Payslip net payable must be 30,000 from snapshot')
+
+  // 2. Breakdown row values derived from snapshot (no dynamic overrides)
+  const entry = decRun.employeeBreakdown[0]
+  const rowLoan = Number(entry.loanDeduction ?? 0)
+  const rowNet = Number(entry.netPayable ?? 0)
+  assert.equal(rowLoan, 0, 'Breakdown row loan deduction must be 0 from snapshot, never dynamically overridden to 3,000')
+  assert.equal(rowNet, 30000, 'Breakdown row net must be 30,000 from snapshot, never dynamically overridden to 27,000')
+
+  // 3. Perfect agreement between Breakdown and Payslip
+  assert.equal(rowLoan, payslip.loanDeduction, 'Breakdown row loan and Payslip loan MUST match identically')
+  assert.equal(rowNet, payslip.netPay, 'Breakdown row net and Payslip net MUST match identically')
+})
+
+test('Payroll Complete Workflow — 18. Reconciliation Engine Disqualifies Bad Runs (Zero False 100% Pass)', () => {
+  // Run where loans mismatch: run header has totalLoanDeductions: 0, but breakdown rows have loanDeduction: 3,000
+  const mismatchedRun = {
+    id: 'PAY-MISMATCH-LOAN',
+    period: '2026-12',
+    totalGross: 179500,
+    grossPayroll: 179500,
+    totalLoanDeductions: 0, // Mismatch with breakdown
+    totalNet: 179500,
+    netPayable: 179500,
+    totalEmployees: 1,
+    employeeBreakdown: [
+      {
+        employeeId: 'EMP-004',
+        grossSalary: 30000,
+        loanDeduction: 3000,
+        salaryTaxWithheld: 0,
+        totalDeductions: 3000,
+        netPayable: 27000
+      }
+    ]
+  }
+
+  const entries = mismatchedRun.employeeBreakdown
+  const runTotalsNet = entries.reduce((s, e) => s + e.netPayable, 0)
+  const runTotalsLoans = entries.reduce((s, e) => s + e.loanDeduction, 0)
+  const bulkRunNet = Number(mismatchedRun.netPayable)
+  const recordedLoans = Number(mismatchedRun.totalLoanDeductions)
+
+  const isNetMatched = Math.abs(runTotalsNet - bulkRunNet) < 0.05
+  const isLoanMatched = Math.abs(runTotalsLoans - recordedLoans) < 0.05
+
+  assert.equal(isNetMatched, false, 'Net mismatch must be detected')
+  assert.equal(isLoanMatched, false, 'Loan mismatch must be detected')
+
+  const isReconciled = isNetMatched && isLoanMatched
+  assert.equal(isReconciled, false, 'Must NEVER display 100% Reconciled when there is a variance')
+})

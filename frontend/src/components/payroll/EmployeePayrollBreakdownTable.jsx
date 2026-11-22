@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react'
 import AppIcon from '@/components/common/AppIcon'
 import Button from '@/components/common/Button'
 import StatusBadge from '@/components/common/StatusBadge'
-import { loanService } from '@/services/loanService'
 
 export function EmployeePayrollBreakdownTable({
   payrollRuns = [],
@@ -104,16 +103,28 @@ export function EmployeePayrollBreakdownTable({
   const runTotals = useMemo(() => {
     return rawEntries.reduce(
       (acc, e) => {
-        acc.basic += Number(e.basicSalary || 0)
-        acc.allowances += Number(e.allowancesTotal ?? e.allowances ?? 0)
-        acc.overtime += Number(e.overtimePay ?? e.overtimeAmount ?? 0)
-        acc.tax += Number(e.salaryTaxWithheld ?? e.taxDeduction ?? 0)
-        acc.loans += Number(e.loanDeduction ?? 0)
-        acc.otherDeductions += Number(e.unpaidLeaveDeduction ?? e.otherDeductions ?? 0)
-        acc.net += Number(e.netPayable ?? e.netSalary ?? 0)
+        const b = Number(e.basicSalary || 0)
+        const a = Number(e.allowancesTotal ?? e.allowances ?? 0)
+        const ot = Number(e.overtimePay ?? e.overtimeAmount ?? 0)
+        const g = Number(e.grossSalary ?? e.grossEarnings ?? (b + a + ot))
+        const tx = Number(e.salaryTaxWithheld ?? e.taxDeduction ?? e.incomeTax ?? 0)
+        const ln = Number(e.loanDeduction ?? e.loanDeductions ?? e.loanRecovery ?? 0)
+        const oth = Number(e.unpaidLeaveDeduction ?? e.otherDeductions ?? 0)
+        const totDed = Number(e.totalDeductions ?? (tx + ln + oth))
+        const n = Number(e.netPayable ?? e.netSalary ?? Math.max(0, g - totDed))
+
+        acc.basic += b
+        acc.allowances += a
+        acc.overtime += ot
+        acc.gross += g
+        acc.tax += tx
+        acc.loans += ln
+        acc.otherDeductions += oth
+        acc.totalDeductions += totDed
+        acc.net += n
         return acc
       },
-      { basic: 0, allowances: 0, overtime: 0, tax: 0, loans: 0, otherDeductions: 0, net: 0 }
+      { basic: 0, allowances: 0, overtime: 0, gross: 0, tax: 0, loans: 0, otherDeductions: 0, totalDeductions: 0, net: 0 }
     )
   }, [rawEntries])
 
@@ -121,16 +132,28 @@ export function EmployeePayrollBreakdownTable({
   const filteredTotals = useMemo(() => {
     return filteredEntries.reduce(
       (acc, e) => {
-        acc.basic += Number(e.basicSalary || 0)
-        acc.allowances += Number(e.allowancesTotal ?? e.allowances ?? 0)
-        acc.overtime += Number(e.overtimePay ?? e.overtimeAmount ?? 0)
-        acc.tax += Number(e.salaryTaxWithheld ?? e.taxDeduction ?? 0)
-        acc.loans += Number(e.loanDeduction ?? 0)
-        acc.otherDeductions += Number(e.unpaidLeaveDeduction ?? e.otherDeductions ?? 0)
-        acc.net += Number(e.netPayable ?? e.netSalary ?? 0)
+        const b = Number(e.basicSalary || 0)
+        const a = Number(e.allowancesTotal ?? e.allowances ?? 0)
+        const ot = Number(e.overtimePay ?? e.overtimeAmount ?? 0)
+        const g = Number(e.grossSalary ?? e.grossEarnings ?? (b + a + ot))
+        const tx = Number(e.salaryTaxWithheld ?? e.taxDeduction ?? e.incomeTax ?? 0)
+        const ln = Number(e.loanDeduction ?? e.loanDeductions ?? e.loanRecovery ?? 0)
+        const oth = Number(e.unpaidLeaveDeduction ?? e.otherDeductions ?? 0)
+        const totDed = Number(e.totalDeductions ?? (tx + ln + oth))
+        const n = Number(e.netPayable ?? e.netSalary ?? Math.max(0, g - totDed))
+
+        acc.basic += b
+        acc.allowances += a
+        acc.overtime += ot
+        acc.gross += g
+        acc.tax += tx
+        acc.loans += ln
+        acc.otherDeductions += oth
+        acc.totalDeductions += totDed
+        acc.net += n
         return acc
       },
-      { basic: 0, allowances: 0, overtime: 0, tax: 0, loans: 0, otherDeductions: 0, net: 0 }
+      { basic: 0, allowances: 0, overtime: 0, gross: 0, tax: 0, loans: 0, otherDeductions: 0, totalDeductions: 0, net: 0 }
     )
   }, [filteredEntries])
 
@@ -138,11 +161,28 @@ export function EmployeePayrollBreakdownTable({
   const bulkRunNet = Number(currentRun?.netPayable ?? currentRun?.totalNet ?? 0)
   const bulkRunGross = Number(currentRun?.grossPayroll ?? currentRun?.totalGross ?? 0)
   const bulkRunHeadcount = Number(currentRun?.totalEmployees ?? 0)
+  const recordedLoans = currentRun?.totalLoanDeductions != null ? Number(currentRun.totalLoanDeductions) : null
+  const recordedTax = currentRun?.totalTax != null ? Number(currentRun.totalTax) : (currentRun?.totalTaxWithheld != null ? Number(currentRun.totalTaxWithheld) : null)
+  const recordedDeductions = currentRun?.totalDeductions != null ? Number(currentRun.totalDeductions) : null
+
+  const hasEntryMismatch = rawEntries.some((e) => {
+    const g = Number(e.grossSalary ?? e.grossEarnings ?? 0)
+    const d = Number(e.totalDeductions ?? (Number(e.salaryTaxWithheld ?? 0) + Number(e.loanDeduction ?? 0) + Number(e.unpaidLeaveDeduction ?? e.otherDeductions ?? 0)))
+    const n = Number(e.netPayable ?? e.netSalary ?? 0)
+    return g > 0 && Math.abs(Math.max(0, g - d) - n) > 0.05
+  })
+
   const isReconciled =
-    currentRun &&
+    Boolean(currentRun) &&
+    currentRun.isReconciled !== false &&
+    !hasEntryMismatch &&
     rawEntries.length > 0 &&
     (bulkRunHeadcount === 0 || bulkRunHeadcount === rawEntries.length) &&
-    Math.abs(runTotals.net - bulkRunNet) < 0.05
+    Math.abs(runTotals.net - bulkRunNet) < 0.05 &&
+    Math.abs(runTotals.gross - bulkRunGross) < 0.05 &&
+    (recordedLoans == null || Math.abs(runTotals.loans - recordedLoans) < 0.05) &&
+    (recordedTax == null || Math.abs(runTotals.tax - recordedTax) < 0.05) &&
+    (recordedDeductions == null || Math.abs(runTotals.totalDeductions - recordedDeductions) < 0.05)
 
   // Helper to check anti-self-approval
   const isSelf = (entry) => {
@@ -193,9 +233,9 @@ export function EmployeePayrollBreakdownTable({
                 <span>Reconciled with Bulk Run: PKR {runTotals.net.toLocaleString()}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-semibold">
-                <AppIcon name="alertTriangle" className="w-4 h-4 text-amber-600" />
-                <span>Entries Total: PKR {runTotals.net.toLocaleString()} (Bulk: PKR {bulkRunNet.toLocaleString()})</span>
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold">
+                <AppIcon name="alertTriangle" className="w-4 h-4 text-rose-600" />
+                <span>Financial Mismatch: Entries PKR {runTotals.net.toLocaleString()} vs Bulk PKR {bulkRunNet.toLocaleString()}</span>
               </div>
             )}
           </div>
@@ -303,23 +343,9 @@ export function EmployeePayrollBreakdownTable({
               const overtime = Number(entry.overtimePay ?? entry.overtimeAmount ?? 0)
               const otHours = Number(entry.overtimeHours || 0)
               const tax = Number(entry.salaryTaxWithheld ?? entry.taxDeduction ?? 0)
-              let loan = Number(entry.loanDeduction ?? 0)
-              if (loan === 0) {
-                try {
-                  const empCode = entry.employeeId || entry.employeeCode || entry.employeeCuid
-                  const activeLoanInfo = loanService.getActiveDeductionForEmployee(empCode, currentRun?.period || activePeriod)
-                  if (activeLoanInfo && Number(activeLoanInfo.totalDeduction) > 0) {
-                    loan = Number(activeLoanInfo.totalDeduction)
-                  }
-                } catch {
-                  // ignore
-                }
-              }
+              const loan = Number(entry.loanDeduction ?? entry.loanDeductions ?? entry.loanRecovery ?? 0)
               const other = Number(entry.unpaidLeaveDeduction ?? entry.otherDeductions ?? 0)
-              const calculatedNet = (Number(entry.loanDeduction ?? 0) === 0 && loan > 0)
-                ? Math.max(0, (basic + allowances + overtime) - (tax + loan + other))
-                : Number(entry.netPayable ?? entry.netSalary ?? 0)
-              const net = calculatedNet
+              const net = Number(entry.netPayable ?? entry.netSalary ?? Math.max(0, (basic + allowances + overtime) - (tax + loan + other)))
 
               const isEntryApproved = String(entry.approvalStatus || '').toUpperCase() === 'APPROVED'
               const isEntryRejected = String(entry.approvalStatus || '').toUpperCase() === 'REJECTED'
@@ -509,7 +535,7 @@ export function EmployeePayrollBreakdownTable({
                   {isReconciled ? (
                     <span className="text-emerald-700 font-bold">✓ 100% Reconciled</span>
                   ) : (
-                    <span className="text-amber-700 font-semibold">Variance: PKR {(runTotals.net - bulkRunNet).toLocaleString()}</span>
+                    <span className="text-rose-700 font-semibold">✕ Financial Mismatch: Variance PKR {(runTotals.net - bulkRunNet).toLocaleString()}</span>
                   )}
                 </td>
               </tr>
