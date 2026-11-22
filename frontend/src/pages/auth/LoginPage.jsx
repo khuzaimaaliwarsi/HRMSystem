@@ -139,22 +139,71 @@ export function LoginPage() {
             </Button>
 
             {/* Quick Access Helper */}
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 bg-slate-50/80 px-3 py-2 rounded-lg border border-slate-200">
-              <div className="flex flex-col text-left">
-                <span className="font-semibold text-slate-700">Super Admin Credentials:</span>
-                <span className="font-mono text-slate-600">Username: <strong className="text-blue-700">superadmin</strong> &bull; Password: <strong className="text-blue-700">Admin123456!</strong></span>
+            <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50/80 p-3 rounded-lg border border-slate-200 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <AppIcon name="lock" className="w-3.5 h-3.5 text-blue-700" />
+                  <span>Quick Portal Access (1-Click Fill)</span>
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Password: <strong className="text-slate-700">Admin123456!</strong></span>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIdentifier('superadmin')
-                  setPassword('Admin123456!')
-                }}
-                className="px-2.5 py-1 text-[10px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded transition shrink-0 ml-2 cursor-pointer"
-                title="Fill Super Admin Credentials"
-              >
-                Auto Fill
-              </button>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('superadmin')
+                    setPassword('Admin123456!')
+                  }}
+                  className="px-2 py-1.5 font-bold text-blue-800 bg-blue-100/90 hover:bg-blue-200 rounded border border-blue-200 transition text-center cursor-pointer"
+                  title="Super Admin (Full Suite Access)"
+                >
+                  Super Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('EMP-002')
+                    setPassword('Admin123456!')
+                  }}
+                  className="px-2 py-1.5 font-bold text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 rounded border border-emerald-200 transition text-center cursor-pointer"
+                  title="HR / Admin Portal (EMP-002)"
+                >
+                  HR Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('EMP-003')
+                    setPassword('Admin123456!')
+                  }}
+                  className="px-2 py-1.5 font-bold text-purple-800 bg-purple-100/90 hover:bg-purple-200 rounded border border-purple-200 transition text-center cursor-pointer"
+                  title="Department Manager Portal (EMP-003)"
+                >
+                  Manager
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('EMP-005')
+                    setPassword('Admin123456!')
+                  }}
+                  className="px-2 py-1.5 font-bold text-amber-800 bg-amber-100/90 hover:bg-amber-200 rounded border border-amber-200 transition text-center cursor-pointer"
+                  title="Team Lead Portal (EMP-005)"
+                >
+                  Team Lead
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifier('EMP-004')
+                    setPassword('Admin123456!')
+                  }}
+                  className="px-2 py-1.5 font-bold text-slate-800 bg-slate-200 hover:bg-slate-300 rounded border border-slate-300 transition text-center cursor-pointer col-span-2 sm:col-span-1"
+                  title="Employee Self-Service (EMP-004)"
+                >
+                  Employee
+                </button>
+              </div>
             </div>
           </form>
         </div>
