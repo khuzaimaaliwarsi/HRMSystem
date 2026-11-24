@@ -23,26 +23,23 @@ class HolidayCalendarService {
   }
 
   _getItem(key, defaultVal) {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+    if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+      try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
-      }
-    } catch {
-      // Fallback
+      } catch {}
     }
-    return this.memoryStorage[key] !== undefined ? this.memoryStorage[key] : defaultVal
+    return defaultVal !== undefined ? defaultVal : []
   }
 
   _setItem(key, value) {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(key, JSON.stringify(value))
-      }
-    } catch {
-      // Fallback
-    }
     this.memoryStorage[key] = value
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value))
+      } catch {}
+    }
   }
 
   _initialize() {

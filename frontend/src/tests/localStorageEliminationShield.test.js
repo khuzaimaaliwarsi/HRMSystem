@@ -73,14 +73,23 @@ describe('LocalStorage Business Data Elimination & Shield Suite', () => {
     window.localStorage.setItem('isysware_hrms_employees_data', JSON.stringify([{ id: 'leaked_emp' }]))
     window.localStorage.setItem('isysware_wfh_requests', JSON.stringify([{ id: 'wfh_1' }]))
     window.localStorage.setItem('hrms_data_loan_records', JSON.stringify([{ id: 'loan_1' }]))
+    window.localStorage.setItem('isysware_hrms_f05_leave_types_v1', JSON.stringify([{ id: 'leave_1' }]))
+    window.localStorage.setItem('isysware_hrms_f12_expense_categories_v1', JSON.stringify([{ id: 'exp_1' }]))
+    window.localStorage.setItem('isysware_hrms_f06_loans_v1', JSON.stringify([{ id: 'loan_1' }]))
+    window.localStorage.setItem('isysware_hrms_f09_tickets_v1', JSON.stringify([{ id: 'ticket_1' }]))
 
     // Must be completely blocked and dropped
     assert.strictEqual(mockStore['isysware_hrms_employees_data'], undefined)
     assert.strictEqual(mockStore['isysware_wfh_requests'], undefined)
     assert.strictEqual(mockStore['hrms_data_loan_records'], undefined)
+    assert.strictEqual(mockStore['isysware_hrms_f05_leave_types_v1'], undefined)
+    assert.strictEqual(mockStore['isysware_hrms_f12_expense_categories_v1'], undefined)
+    assert.strictEqual(mockStore['isysware_hrms_f06_loans_v1'], undefined)
+    assert.strictEqual(mockStore['isysware_hrms_f09_tickets_v1'], undefined)
 
     // Attempt to read business data directly via getItem returns null
     assert.strictEqual(window.localStorage.getItem('isysware_hrms_employees_data'), null)
+    assert.strictEqual(window.localStorage.getItem('isysware_hrms_f05_leave_types_v1'), null)
 
     // Attempt to write preserved UI preference key must succeed
     window.localStorage.setItem('hrms_sidebar_collapsed', 'false')

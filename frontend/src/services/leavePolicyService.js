@@ -47,7 +47,7 @@ class LeavePolicyService {
       probationEligible: t.probationEligible ?? true
     }))
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+      if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('isysware_hrms_f05_leave_types_v1', JSON.stringify(this.leaveTypes))
       }
     } catch (_) {}
@@ -55,7 +55,7 @@ class LeavePolicyService {
 
   _loadConfiguredThreshold() {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+      if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
         const stored = window.localStorage.getItem('hrms_leave_policy_threshold')
         if (stored) {
           const num = parseInt(stored, 10)
@@ -88,7 +88,7 @@ class LeavePolicyService {
       annualLeaveApproverThreshold: num
     }))
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+      if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('hrms_leave_policy_threshold', String(num))
       }
     } catch (_) {}

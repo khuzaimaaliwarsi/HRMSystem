@@ -50,7 +50,7 @@ class HelpDeskService {
 
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
       try {
         const item = window.localStorage.getItem(key)
         return item ? JSON.parse(item) : defaultVal
@@ -63,7 +63,7 @@ class HelpDeskService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value))
       } catch {

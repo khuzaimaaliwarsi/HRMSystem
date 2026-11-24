@@ -51,7 +51,7 @@ class PolicyService {
         // Fallback
       }
     }
-    return defaultVal
+    return defaultVal !== undefined ? defaultVal : []
   }
 
   _setItem(key, value) {

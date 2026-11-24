@@ -230,7 +230,7 @@ export const dashboardService = {
     // Manager approval limit invariant (Max 2 cumulative days/month)
     let teamApprovals = []
     if (teamCount > 0) {
-      if (typeof window !== 'undefined' && window.localStorage?.getItem('isysware_hrms_f05_leave_requests_v1') && leaveService?.getLeaveRequests) {
+      if (leaveService?.getLeaveRequests) {
         try {
           const rawLeaves = leaveService.getLeaveRequests({}, { role: 'manager', id: managerId, employeeId: managerId })
           teamApprovals = rawLeaves
@@ -257,7 +257,7 @@ export const dashboardService = {
     // Team tasks
     let teamTasks = []
     if (teamCount > 0) {
-      if (typeof window !== 'undefined' && window.localStorage?.getItem('isysware_hrms_f07_tasks_v1') && taskService?.getTasks) {
+      if (taskService?.getTasks) {
         try {
           const rawTasks = taskService.getTasks(
             { status: taskStatus !== 'all' ? taskStatus : undefined },
@@ -329,7 +329,7 @@ export const dashboardService = {
 
     let teamApprovals = []
     if (teamCount > 0) {
-      if (typeof window !== 'undefined' && window.localStorage?.getItem('isysware_hrms_f05_leave_requests_v1') && leaveService?.getLeaveRequests) {
+      if (leaveService?.getLeaveRequests) {
         try {
           const rawLeaves = leaveService.getLeaveRequests({}, { role: 'team_lead', id: teamLeadId, employeeId: teamLeadId })
           teamApprovals = rawLeaves
@@ -355,7 +355,7 @@ export const dashboardService = {
 
     let teamTasks = []
     if (teamCount > 0) {
-      if (typeof window !== 'undefined' && window.localStorage?.getItem('isysware_hrms_f07_tasks_v1') && taskService?.getTasks) {
+      if (taskService?.getTasks) {
         try {
           const rawTasks = taskService.getTasks(
             { status: taskStatus !== 'all' ? taskStatus : undefined },

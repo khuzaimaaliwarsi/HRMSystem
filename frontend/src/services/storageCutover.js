@@ -136,7 +136,7 @@ export function isBusinessKey(key) {
  */
 export function installLocalStorageShield() {
   if (typeof window === 'undefined' || !window.localStorage) return
-  if (window.localStorage.__hrms_shield_active) return
+  if (window.__hrms_shield_active) return
 
   try {
     const originalSetItem = window.localStorage.setItem.bind(window.localStorage)
@@ -158,12 +158,24 @@ export function installLocalStorageShield() {
       return originalGetItem(key)
     }
 
-    Object.defineProperty(window.localStorage, '__hrms_shield_active', {
-      value: true,
-      configurable: false,
-      enumerable: false,
-      writable: false
-    })
+    if (typeof Storage !== 'undefined' && Storage.prototype) {
+      const origStorageSetItem = Storage.prototype.setItem
+      const origStorageGetItem = Storage.prototype.getItem
+      Storage.prototype.setItem = function (key, value) {
+        if (typeof key === 'string' && isBusinessKey(key)) {
+          return
+        }
+        return origStorageSetItem.call(this, key, value)
+      }
+      Storage.prototype.getItem = function (key) {
+        if (typeof key === 'string' && isBusinessKey(key)) {
+          return null
+        }
+        return origStorageGetItem.call(this, key)
+      }
+    }
+
+    window.__hrms_shield_active = true
   } catch (err) {
     console.warn('[storageCutover] Shield setup warning:', err.message)
   }
@@ -201,7 +213,12 @@ export function executeCutoverCleanup() {
     }
   } catch (_) {}
 
-  // 3. Install permanent interceptor shield
+  // 3. Remove any __hrms_shield_active key from localStorage if previously stored
+  try {
+    window.localStorage.removeItem('__hrms_shield_active')
+  } catch (_) {}
+
+  // 4. Install permanent interceptor shield
   installLocalStorageShield()
 
   return { cleanedCount: cleaned, preservedCount: PRESERVED_UI_KEYS.length }
