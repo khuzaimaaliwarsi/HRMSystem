@@ -98,14 +98,7 @@ export function EmployeeFormModal({
   const [error, setError] = useState(null)
 
   // Custom Employment Categories
-  const [customCategories, setCustomCategories] = useState(() => {
-    try {
-      const stored = localStorage.getItem('isysware_hrms_custom_employment_categories_v1')
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
-  })
+  const [customCategories, setCustomCategories] = useState([])
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
 
@@ -166,9 +159,6 @@ export function EmployeeFormModal({
     if (!customCategories.includes(trimmed)) {
       const updated = [trimmed, ...customCategories]
       setCustomCategories(updated)
-      try {
-        localStorage.setItem('isysware_hrms_custom_employment_categories_v1', JSON.stringify(updated))
-      } catch {}
     }
     setFormData((prev) => ({ ...prev, employmentType: trimmed }))
     setIsAddingCustomCategory(false)

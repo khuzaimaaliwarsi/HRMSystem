@@ -90,11 +90,9 @@ class DataPurgeService {
       console.warn('[DataPurgeService] Backend purge call response:', err.message)
     }
 
-    // 2. Set operational cleared flag in localStorage
+    // 2. Clean out stale operational keys from storage while strictly keeping settings
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(OPERATIONAL_CLEARED_KEY, 'true')
-        window.localStorage.setItem('isysware_hrms_fresh_qa_mode_active', 'true')
 
         // Clean out stale operational keys while strictly keeping settings
         const keysToRemove = []
@@ -325,9 +323,6 @@ class DataPurgeService {
     // 2. Clear localStorage keys relevant to selected modules
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        if (moduleIds.length >= 11) {
-          window.localStorage.setItem(OPERATIONAL_CLEARED_KEY, 'true')
-        }
 
         const keysToRemove = []
         for (let i = 0; i < window.localStorage.length; i++) {

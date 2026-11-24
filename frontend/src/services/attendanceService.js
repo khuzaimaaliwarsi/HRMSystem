@@ -2125,9 +2125,7 @@ class AttendanceService {
           emps[empIdx].attendanceToday = 'WFH'
           emps[empIdx].workArrangement = 'WFH'
         }
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('isysware_hrms_employees_data', JSON.stringify(emps))
-        }
+        // In-memory update, strictly zero localStorage writes
       }
     } catch {
       // safe fallback

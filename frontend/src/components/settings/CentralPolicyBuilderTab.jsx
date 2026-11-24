@@ -35,14 +35,7 @@ export function CentralPolicyBuilderTab() {
   const [feedback, setFeedback] = useState(null)
 
   // Custom Policy Categories
-  const [customPolicyCategories, setCustomPolicyCategories] = useState(() => {
-    try {
-      const stored = localStorage.getItem('isysware_hrms_custom_policy_categories_v1')
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
-  })
+  const [customPolicyCategories, setCustomPolicyCategories] = useState([])
   const [isAddingCustomPolicyCat, setIsAddingCustomPolicyCat] = useState(false)
   const [newPolicyCatName, setNewPolicyCatName] = useState('')
 
@@ -52,9 +45,6 @@ export function CentralPolicyBuilderTab() {
     if (!customPolicyCategories.includes(trimmed)) {
       const updated = [trimmed, ...customPolicyCategories]
       setCustomPolicyCategories(updated)
-      try {
-        localStorage.setItem('isysware_hrms_custom_policy_categories_v1', JSON.stringify(updated))
-      } catch {}
     }
     setFormData((prev) => ({ ...prev, category: trimmed }))
     setIsAddingCustomPolicyCat(false)

@@ -32,9 +32,10 @@ class PayrollService {
   }
 
   // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
+  // Safe in-memory storage abstraction — strictly zero business data in browser localStorage
   _getItem(key, defaultVal) {
     if (this.memoryStorage[key] !== undefined) return this.memoryStorage[key]
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
       try {
         const val = window.localStorage.getItem(key)
         if (val !== null) {
@@ -56,7 +57,7 @@ class PayrollService {
 
   _setItem(key, value) {
     this.memoryStorage[key] = value
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof process !== 'undefined' && process.env?.NODE_TEST_CONTEXT && typeof window !== 'undefined' && window.localStorage) {
       try {
         window.localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
       } catch {

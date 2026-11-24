@@ -5,6 +5,7 @@ import Button from '@/components/common/Button'
 import Alert from '@/components/common/Alert'
 import { getKarachiToday, getKarachiTimeString, formatTimeTo12Hour, formatLateDuration } from '@/lib/dateUtils'
 import { shiftService } from '@/services/shiftService'
+import { attendanceService } from '@/services/attendanceService'
 
 export function CheckInOutWidget({
   currentRecord = null,
@@ -32,23 +33,17 @@ export function CheckInOutWidget({
       try {
         const empCode = currentUser?.employeeId || currentUser?.id
         const todayStr = getKarachiToday()
-        const rawWfh = localStorage.getItem('isysware_wfh_requests')
-        if (rawWfh) {
-          const list = JSON.parse(rawWfh)
-          const isWfh = list.some(w => (w.employeeId === empCode) && (w.status === 'Approved' || w.status === 'APPROVED') && (w.requestedDate === todayStr || (w.startDate && w.startDate.slice(0, 10) <= todayStr && w.endDate && w.endDate.slice(0, 10) >= todayStr)))
-          if (isWfh) {
-            setWorkArrangement('WFH')
-            return
-          }
+        const wfhList = attendanceService.getWfhRequests?.() || []
+        const isWfh = wfhList.some(w => (w.employeeId === empCode) && (w.status === 'Approved' || w.status === 'APPROVED') && (w.requestedDate === todayStr || (w.startDate && w.startDate.slice(0, 10) <= todayStr && w.endDate && w.endDate.slice(0, 10) >= todayStr)))
+        if (isWfh) {
+          setWorkArrangement('WFH')
+          return
         }
-        const rawFd = localStorage.getItem('isysware_field_duty_requests')
-        if (rawFd) {
-          const list = JSON.parse(rawFd)
-          const isFd = list.some(f => (f.employeeId === empCode) && (f.status === 'Approved' || f.status === 'APPROVED') && (f.visitDate === todayStr || (f.dutyDate && f.dutyDate.slice(0, 10) === todayStr)))
-          if (isFd) {
-            setWorkArrangement('Field Duty')
-            return
-          }
+        const fdList = attendanceService.getFieldDutyRequests?.() || []
+        const isFd = fdList.some(f => (f.employeeId === empCode) && (f.status === 'Approved' || f.status === 'APPROVED') && (f.visitDate === todayStr || (f.dutyDate && f.dutyDate.slice(0, 10) === todayStr)))
+        if (isFd) {
+          setWorkArrangement('Field Duty')
+          return
         }
       } catch (_) {}
     }

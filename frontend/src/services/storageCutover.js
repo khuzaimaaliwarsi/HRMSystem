@@ -5,12 +5,14 @@
  *
  * Exact Strategy:
  * 1. Strictly identifies and removes all business data keys (f02 through f13, demo sessions, mock accounts).
- * 2. Strictly preserves UI preferences:
+ * 2. Strictly preserves UI preferences ONLY:
  *    - hrms_theme
  *    - hrms_sidebar_collapsed
  *    - hrms_table_density
  *    - Any non-HRMS browser preferences.
- * 3. Prevents any subsequent writes of business data to window.localStorage in browser runtime.
+ * 3. Installs an impermeable shield on window.localStorage:
+ *    - Intercepts and drops ANY subsequent writes of business data to window.localStorage in browser runtime.
+ *    - Intercepts and returns null on any reads of business keys from localStorage.
  */
 
 export const BUSINESS_STORAGE_KEYS = [
@@ -102,7 +104,10 @@ export const BUSINESS_STORAGE_KEYS = [
   'isysware_hrms_timesheet_signoffs_v1',
   'isysware_hrms_unknown_experimental_key_v99',
   'isysware_hrms_user_accounts',
-  'isysware_hrms_user_accounts_v1'
+  'isysware_hrms_user_accounts_v1',
+  'isysware_wfh_requests',
+  'isysware_field_duty_requests',
+  'isysware_operational_data_cleared'
 ]
 
 export const PRESERVED_UI_KEYS = [
@@ -110,6 +115,59 @@ export const PRESERVED_UI_KEYS = [
   'hrms_sidebar_collapsed',
   'hrms_table_density'
 ]
+
+/**
+ * Storage guard: In browser runtime, checks if a key represents business data.
+ */
+export function isBusinessKey(key) {
+  if (typeof key !== 'string') return false
+  if (PRESERVED_UI_KEYS.includes(key)) return false
+  return (
+    key.startsWith('isysware_') ||
+    key.startsWith('hrms_data_') ||
+    (key.startsWith('hrms_') && !PRESERVED_UI_KEYS.includes(key)) ||
+    BUSINESS_STORAGE_KEYS.includes(key)
+  )
+}
+
+/**
+ * Installs an impermeable shield on window.localStorage in browser runtime.
+ * Any attempt to write business data is intercepted and dropped immediately.
+ */
+export function installLocalStorageShield() {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  if (window.localStorage.__hrms_shield_active) return
+
+  try {
+    const originalSetItem = window.localStorage.setItem.bind(window.localStorage)
+    const originalGetItem = window.localStorage.getItem.bind(window.localStorage)
+
+    window.localStorage.setItem = function (key, value) {
+      if (typeof key === 'string' && isBusinessKey(key)) {
+        // Strictly prevent saving business data in browser localStorage
+        return
+      }
+      return originalSetItem(key, value)
+    }
+
+    window.localStorage.getItem = function (key) {
+      if (typeof key === 'string' && isBusinessKey(key)) {
+        // Return null for business keys so services rely strictly on API and in-memory state
+        return null
+      }
+      return originalGetItem(key)
+    }
+
+    Object.defineProperty(window.localStorage, '__hrms_shield_active', {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false
+    })
+  } catch (err) {
+    console.warn('[storageCutover] Shield setup warning:', err.message)
+  }
+}
 
 /**
  * Executes idempotent one-time exact key cleanup on browser initialization.
@@ -124,13 +182,15 @@ export function executeCutoverCleanup() {
 
   // 1. Purge all known legacy business keys
   for (const key of BUSINESS_STORAGE_KEYS) {
-    if (window.localStorage.getItem(key) !== null) {
-      window.localStorage.removeItem(key)
-      cleaned++
-    }
+    try {
+      if (window.localStorage.getItem(key) !== null) {
+        window.localStorage.removeItem(key)
+        cleaned++
+      }
+    } catch (_) {}
   }
 
-  // 2. Dynamic sweep for any remaining isysware_hrms_* business keys
+  // 2. Dynamic sweep for any remaining isysware_* or business keys
   try {
     for (let i = window.localStorage.length - 1; i >= 0; i--) {
       const k = window.localStorage.key(i)
@@ -139,34 +199,22 @@ export function executeCutoverCleanup() {
         cleaned++
       }
     }
-  } catch {
-    // ignore
-  }
+  } catch (_) {}
 
-  // Set cutover sentinel marker
-  try {
-    window.localStorage.setItem('isysware_hrms_pg_cutover_v1', 'active')
-  } catch {
-    // ignore
-  }
+  // 3. Install permanent interceptor shield
+  installLocalStorageShield()
 
   return { cleanedCount: cleaned, preservedCount: PRESERVED_UI_KEYS.length }
 }
 
-/**
- * Storage guard: In browser runtime, intercepts business keys from ever being written to LocalStorage
- */
-export function isBusinessKey(key) {
-  if (typeof key !== 'string') return false
-  if (PRESERVED_UI_KEYS.includes(key)) return false
-  return (
-    key.startsWith('isysware_hrms_') &&
-    key !== 'isysware_hrms_pg_cutover_v1'
-  )
+// Automatically enforce cutover and shield on module import
+if (typeof window !== 'undefined' && window.localStorage) {
+  executeCutoverCleanup()
 }
 
 export default {
   executeCutoverCleanup,
+  installLocalStorageShield,
   BUSINESS_STORAGE_KEYS,
   PRESERVED_UI_KEYS,
   isBusinessKey

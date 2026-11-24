@@ -46,14 +46,7 @@ export function RequisitionVacancyTab({
   })
 
   // Custom Employment Categories
-  const [customEmploymentCategories, setCustomEmploymentCategories] = useState(() => {
-    try {
-      const stored = localStorage.getItem('isysware_hrms_custom_employment_categories_v1')
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
-  })
+  const [customEmploymentCategories, setCustomEmploymentCategories] = useState([])
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false)
   const [newCustomCategoryName, setNewCustomCategoryName] = useState('')
 
@@ -83,9 +76,6 @@ export function RequisitionVacancyTab({
     if (!customEmploymentCategories.includes(trimmed)) {
       const updated = [trimmed, ...customEmploymentCategories]
       setCustomEmploymentCategories(updated)
-      try {
-        localStorage.setItem('isysware_hrms_custom_employment_categories_v1', JSON.stringify(updated))
-      } catch {}
     }
     setReqForm((prev) => ({ ...prev, employmentCategory: trimmed }))
     setIsAddingCustomCategory(false)
