@@ -70,16 +70,23 @@ class HRLettersService {
   }
 
   _initialize() {
-    const existingTemplates = this._getItem(STORAGE_KEYS.TEMPLATES, null)
-    if (!existingTemplates || existingTemplates.length === 0) {
-      this._setItem(STORAGE_KEYS.TEMPLATES, JSON.parse(JSON.stringify(INITIAL_LETTER_TEMPLATES)))
-    }
-    const existingLetters = this._getItem(STORAGE_KEYS.LETTERS, null)
-    if (!existingLetters || existingLetters.length === 0) {
-      this._setItem(STORAGE_KEYS.LETTERS, JSON.parse(JSON.stringify(INITIAL_ISSUED_LETTERS)))
-    }
-    if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
-      this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT);
+    if (isTest) {
+      const existingTemplates = this._getItem(STORAGE_KEYS.TEMPLATES, null)
+      if (!existingTemplates || existingTemplates.length === 0) {
+        this._setItem(STORAGE_KEYS.TEMPLATES, JSON.parse(JSON.stringify(INITIAL_LETTER_TEMPLATES)))
+      }
+      const existingLetters = this._getItem(STORAGE_KEYS.LETTERS, null)
+      if (!existingLetters || existingLetters.length === 0) {
+        this._setItem(STORAGE_KEYS.LETTERS, JSON.parse(JSON.stringify(INITIAL_ISSUED_LETTERS)))
+      }
+      if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
+        this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
+      }
+    } else {
+      this.memoryStorage[STORAGE_KEYS.TEMPLATES] = []
+      this.memoryStorage[STORAGE_KEYS.LETTERS] = []
+      this.memoryStorage[STORAGE_KEYS.AUDIT_LOGS] = []
     }
   }
 

@@ -67,36 +67,48 @@ class TravelService {
   }
 
   _initialize() {
-    const existingVehicles = this._getItem(STORAGE_KEYS.VEHICLES, null)
-    if (!existingVehicles || existingVehicles.length === 0) {
-      this._setItem(STORAGE_KEYS.VEHICLES, JSON.parse(JSON.stringify(INITIAL_VEHICLES)))
-    }
-    const existingDrivers = this._getItem(STORAGE_KEYS.DRIVERS, null)
-    if (!existingDrivers || existingDrivers.length === 0) {
-      this._setItem(STORAGE_KEYS.DRIVERS, JSON.parse(JSON.stringify(INITIAL_DRIVERS)))
-    }
-    const existingRoutes = this._getItem(STORAGE_KEYS.ROUTES, null)
-    if (!existingRoutes || existingRoutes.length === 0) {
-      this._setItem(STORAGE_KEYS.ROUTES, JSON.parse(JSON.stringify(INITIAL_ROUTES)))
-    }
-    const existingAssignments = this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)
-    if (!existingAssignments || existingAssignments.length === 0) {
-      this._setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.parse(JSON.stringify(INITIAL_TRANSPORT_ASSIGNMENTS)))
-    }
-    const existingRequests = this._getItem(STORAGE_KEYS.REQUESTS, null)
-    if (!existingRequests || existingRequests.length === 0) {
-      this._setItem(STORAGE_KEYS.REQUESTS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_REQUESTS)))
-    }
-    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
-    if (!existingPlans || existingPlans.length === 0) {
-      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_PLANS)))
-    }
-    const existingExpenses = this._getItem(STORAGE_KEYS.EXPENSES, null)
-    if (!existingExpenses || existingExpenses.length === 0) {
-      this._setItem(STORAGE_KEYS.EXPENSES, JSON.parse(JSON.stringify(INITIAL_TRAVEL_EXPENSES)))
-    }
-    if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
-      this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existingVehicles = this._getItem(STORAGE_KEYS.VEHICLES, null)
+      if (!existingVehicles || existingVehicles.length === 0) {
+        this._setItem(STORAGE_KEYS.VEHICLES, JSON.parse(JSON.stringify(INITIAL_VEHICLES)))
+      }
+      const existingDrivers = this._getItem(STORAGE_KEYS.DRIVERS, null)
+      if (!existingDrivers || existingDrivers.length === 0) {
+        this._setItem(STORAGE_KEYS.DRIVERS, JSON.parse(JSON.stringify(INITIAL_DRIVERS)))
+      }
+      const existingRoutes = this._getItem(STORAGE_KEYS.ROUTES, null)
+      if (!existingRoutes || existingRoutes.length === 0) {
+        this._setItem(STORAGE_KEYS.ROUTES, JSON.parse(JSON.stringify(INITIAL_ROUTES)))
+      }
+      const existingAssignments = this._getItem(STORAGE_KEYS.ASSIGNMENTS, null)
+      if (!existingAssignments || existingAssignments.length === 0) {
+        this._setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.parse(JSON.stringify(INITIAL_TRANSPORT_ASSIGNMENTS)))
+      }
+      const existingRequests = this._getItem(STORAGE_KEYS.REQUESTS, null)
+      if (!existingRequests || existingRequests.length === 0) {
+        this._setItem(STORAGE_KEYS.REQUESTS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_REQUESTS)))
+      }
+      const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+      if (!existingPlans || existingPlans.length === 0) {
+        this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAVEL_PLANS)))
+      }
+      const existingExpenses = this._getItem(STORAGE_KEYS.EXPENSES, null)
+      if (!existingExpenses || existingExpenses.length === 0) {
+        this._setItem(STORAGE_KEYS.EXPENSES, JSON.parse(JSON.stringify(INITIAL_TRAVEL_EXPENSES)))
+      }
+      if (!this._getItem(STORAGE_KEYS.AUDIT_LOGS, null)) {
+        this._setItem(STORAGE_KEYS.AUDIT_LOGS, [])
+      }
+    } else {
+      this.memoryStorage[STORAGE_KEYS.VEHICLES] = []
+      this.memoryStorage[STORAGE_KEYS.DRIVERS] = []
+      this.memoryStorage[STORAGE_KEYS.ROUTES] = []
+      this.memoryStorage[STORAGE_KEYS.ASSIGNMENTS] = []
+      this.memoryStorage[STORAGE_KEYS.REQUESTS] = []
+      this.memoryStorage[STORAGE_KEYS.PLANS] = []
+      this.memoryStorage[STORAGE_KEYS.EXPENSES] = []
+      this.memoryStorage[STORAGE_KEYS.AUDIT_LOGS] = []
     }
   }
 

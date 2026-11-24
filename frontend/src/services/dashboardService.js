@@ -248,9 +248,9 @@ export const dashboardService = {
           teamApprovals = []
         }
       } else {
-        teamApprovals = PENDING_APPROVALS.filter(
-          (a) => teamMembers.some((tm) => tm.id === a.applicantId)
-        )
+        teamApprovals = isTest
+          ? PENDING_APPROVALS.filter((a) => teamMembers.some((tm) => tm.id === a.applicantId))
+          : []
       }
     }
 
@@ -347,9 +347,9 @@ export const dashboardService = {
           teamApprovals = []
         }
       } else {
-        teamApprovals = PENDING_APPROVALS.filter(
-          (a) => teamMembers.some((tm) => tm.id === a.applicantId)
-        )
+        teamApprovals = isTest
+          ? PENDING_APPROVALS.filter((a) => teamMembers.some((tm) => tm.id === a.applicantId))
+          : []
       }
     }
 

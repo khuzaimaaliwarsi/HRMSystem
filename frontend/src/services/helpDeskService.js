@@ -73,19 +73,27 @@ class HelpDeskService {
   }
 
   _initialize() {
-    const existingTickets = this._getItem(STORAGE_KEYS.TICKETS, null)
-    if (!existingTickets || existingTickets.length === 0) {
-      this._setItem(STORAGE_KEYS.TICKETS, JSON.parse(JSON.stringify(INITIAL_TICKETS)))
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existingTickets = this._getItem(STORAGE_KEYS.TICKETS, null)
+      if (!existingTickets || existingTickets.length === 0) {
+        this._setItem(STORAGE_KEYS.TICKETS, JSON.parse(JSON.stringify(INITIAL_TICKETS)))
+      }
+      const existingCats = this._getItem(STORAGE_KEYS.CATEGORIES, null)
+      if (!existingCats || existingCats.length === 0) {
+        this._setItem(STORAGE_KEYS.CATEGORIES, JSON.parse(JSON.stringify(TICKET_CATEGORIES)))
+      }
+      const existingTeams = this._getItem(STORAGE_KEYS.TEAMS, null)
+      if (!existingTeams || existingTeams.length === 0) {
+        this._setItem(STORAGE_KEYS.TEAMS, JSON.parse(JSON.stringify(SUPPORT_TEAMS)))
+      }
+      this._setItem(STORAGE_KEYS.SLA_TARGETS, SLA_TARGETS)
+    } else {
+      this.memoryStorage[STORAGE_KEYS.TICKETS] = []
+      this.memoryStorage[STORAGE_KEYS.CATEGORIES] = []
+      this.memoryStorage[STORAGE_KEYS.TEAMS] = []
+      this.memoryStorage[STORAGE_KEYS.SLA_TARGETS] = {}
     }
-    const existingCats = this._getItem(STORAGE_KEYS.CATEGORIES, null)
-    if (!existingCats || existingCats.length === 0) {
-      this._setItem(STORAGE_KEYS.CATEGORIES, JSON.parse(JSON.stringify(TICKET_CATEGORIES)))
-    }
-    const existingTeams = this._getItem(STORAGE_KEYS.TEAMS, null)
-    if (!existingTeams || existingTeams.length === 0) {
-      this._setItem(STORAGE_KEYS.TEAMS, JSON.parse(JSON.stringify(SUPPORT_TEAMS)))
-    }
-    this._setItem(STORAGE_KEYS.SLA_TARGETS, SLA_TARGETS)
   }
 
   subscribe(listener) {

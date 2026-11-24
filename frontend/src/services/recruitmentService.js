@@ -80,37 +80,48 @@ class RecruitmentService {
   }
 
   _initialize() {
-    if (!this._getItem(STORAGE_KEYS.REQUISITIONS, null)) {
-      this._setItem(STORAGE_KEYS.REQUISITIONS, INITIAL_REQUISITIONS)
-    }
-    if (!this._getItem(STORAGE_KEYS.VACANCIES, null)) {
-      this._setItem(STORAGE_KEYS.VACANCIES, INITIAL_VACANCIES)
-    }
-    const candidates = this._getItem(STORAGE_KEYS.CANDIDATES, null)
-    if (!candidates || candidates.length === 0 || !candidates.some((c) => (c.fullName || c.name)?.includes('UAT QA Candidate') || c.id === 'CAN-009')) {
-      const mergedCand = [...(candidates || [])]
-      INITIAL_CANDIDATES.forEach((initCand) => {
-        if (!mergedCand.some((m) => m.id === initCand.id)) {
-          mergedCand.push(initCand)
-        }
-      })
-      this._setItem(STORAGE_KEYS.CANDIDATES, mergedCand)
-    }
-    const interviews = this._getItem(STORAGE_KEYS.INTERVIEWS, null)
-    if (!interviews || interviews.length === 0 || !interviews.some((i) => i.candidateName?.includes('UAT QA Candidate') || i.id === 'INT-005')) {
-      const mergedInt = [...(interviews || [])]
-      INITIAL_INTERVIEWS.forEach((initInt) => {
-        if (!mergedInt.some((m) => m.id === initInt.id)) {
-          mergedInt.push(initInt)
-        }
-      })
-      this._setItem(STORAGE_KEYS.INTERVIEWS, mergedInt)
-    }
-    if (!this._getItem(STORAGE_KEYS.OFFERS, null)) {
-      this._setItem(STORAGE_KEYS.OFFERS, INITIAL_OFFERS)
-    }
-    if (!this._getItem(STORAGE_KEYS.PROBATION, null)) {
-      this._setItem(STORAGE_KEYS.PROBATION, INITIAL_PROBATION_RECORDS)
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      if (!this._getItem(STORAGE_KEYS.REQUISITIONS, null)) {
+        this._setItem(STORAGE_KEYS.REQUISITIONS, INITIAL_REQUISITIONS)
+      }
+      if (!this._getItem(STORAGE_KEYS.VACANCIES, null)) {
+        this._setItem(STORAGE_KEYS.VACANCIES, INITIAL_VACANCIES)
+      }
+      const candidates = this._getItem(STORAGE_KEYS.CANDIDATES, null)
+      if (!candidates || candidates.length === 0 || !candidates.some((c) => (c.fullName || c.name)?.includes('UAT QA Candidate') || c.id === 'CAN-009')) {
+        const mergedCand = [...(candidates || [])]
+        INITIAL_CANDIDATES.forEach((initCand) => {
+          if (!mergedCand.some((m) => m.id === initCand.id)) {
+            mergedCand.push(initCand)
+          }
+        })
+        this._setItem(STORAGE_KEYS.CANDIDATES, mergedCand)
+      }
+      const interviews = this._getItem(STORAGE_KEYS.INTERVIEWS, null)
+      if (!interviews || interviews.length === 0 || !interviews.some((i) => i.candidateName?.includes('UAT QA Candidate') || i.id === 'INT-005')) {
+        const mergedInt = [...(interviews || [])]
+        INITIAL_INTERVIEWS.forEach((initInt) => {
+          if (!mergedInt.some((m) => m.id === initInt.id)) {
+            mergedInt.push(initInt)
+          }
+        })
+        this._setItem(STORAGE_KEYS.INTERVIEWS, mergedInt)
+      }
+      if (!this._getItem(STORAGE_KEYS.OFFERS, null)) {
+        this._setItem(STORAGE_KEYS.OFFERS, INITIAL_OFFERS)
+      }
+      if (!this._getItem(STORAGE_KEYS.PROBATION, null)) {
+        this._setItem(STORAGE_KEYS.PROBATION, INITIAL_PROBATION_RECORDS)
+      }
+    } else {
+      // Clean zero state in browser runtime: strictly zero mock data on startup; wait for live PostgreSQL synchronization
+      this.memoryStorage[STORAGE_KEYS.REQUISITIONS] = []
+      this.memoryStorage[STORAGE_KEYS.VACANCIES] = []
+      this.memoryStorage[STORAGE_KEYS.CANDIDATES] = []
+      this.memoryStorage[STORAGE_KEYS.INTERVIEWS] = []
+      this.memoryStorage[STORAGE_KEYS.OFFERS] = []
+      this.memoryStorage[STORAGE_KEYS.PROBATION] = []
     }
 
     // Safe QA Record Self-Healing: Correct 02/11/2026 -> 2026-11-02 for Huzaifa/EMP-018

@@ -67,15 +67,22 @@ class PayrollService {
   }
 
   _initialize() {
-    const existing = this._getItem(STORAGE_KEYS.RUNS, null)
-    if (!existing || existing.length === 0) {
-      const seededRuns = INITIAL_PAYROLL_RUNS.map((run) => {
-        return run.employeeBreakdown ? run : this._enrichRunWithEmployees(run)
-      })
-      this._setItem(STORAGE_KEYS.RUNS, seededRuns)
-    }
-    if (!this._getItem(STORAGE_KEYS.PAYSLIPS, null)) {
-      this._setItem(STORAGE_KEYS.PAYSLIPS, {})
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existing = this._getItem(STORAGE_KEYS.RUNS, null)
+      if (!existing || existing.length === 0) {
+        const seededRuns = INITIAL_PAYROLL_RUNS.map((run) => {
+          return run.employeeBreakdown ? run : this._enrichRunWithEmployees(run)
+        })
+        this._setItem(STORAGE_KEYS.RUNS, seededRuns)
+      }
+      if (!this._getItem(STORAGE_KEYS.PAYSLIPS, null)) {
+        this._setItem(STORAGE_KEYS.PAYSLIPS, {})
+      }
+    } else {
+      // Clean zero state in browser runtime: strictly zero mock data on startup; wait for live PostgreSQL synchronization
+      this.memoryStorage[STORAGE_KEYS.RUNS] = []
+      this.memoryStorage[STORAGE_KEYS.PAYSLIPS] = {}
     }
   }
 

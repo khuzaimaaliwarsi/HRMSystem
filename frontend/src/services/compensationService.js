@@ -43,17 +43,24 @@ class CompensationService {
   }
 
   _initialize() {
-    const existingStructures = this._getItem(STORAGE_KEYS.STRUCTURES, null)
-    if (!existingStructures || existingStructures.length === 0) {
-      this._setItem(STORAGE_KEYS.STRUCTURES, INITIAL_SALARY_STRUCTURES)
-    }
-    const existingAllowances = this._getItem(STORAGE_KEYS.ALLOWANCES, null)
-    if (!existingAllowances || existingAllowances.length === 0) {
-      this._setItem(STORAGE_KEYS.ALLOWANCES, INITIAL_ALLOWANCES)
-    }
-    const existingEmpAllowances = this._getItem(STORAGE_KEYS.EMP_ALLOWANCES, null)
-    if (!existingEmpAllowances || existingEmpAllowances.length === 0) {
-      this._setItem(STORAGE_KEYS.EMP_ALLOWANCES, INITIAL_EMPLOYEE_ALLOWANCES)
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existingStructures = this._getItem(STORAGE_KEYS.STRUCTURES, null)
+      if (!existingStructures || existingStructures.length === 0) {
+        this._setItem(STORAGE_KEYS.STRUCTURES, INITIAL_SALARY_STRUCTURES)
+      }
+      const existingAllowances = this._getItem(STORAGE_KEYS.ALLOWANCES, null)
+      if (!existingAllowances || existingAllowances.length === 0) {
+        this._setItem(STORAGE_KEYS.ALLOWANCES, INITIAL_ALLOWANCES)
+      }
+      const existingEmpAllowances = this._getItem(STORAGE_KEYS.EMP_ALLOWANCES, null)
+      if (!existingEmpAllowances || existingEmpAllowances.length === 0) {
+        this._setItem(STORAGE_KEYS.EMP_ALLOWANCES, INITIAL_EMPLOYEE_ALLOWANCES)
+      }
+    } else {
+      this.memoryStorage[STORAGE_KEYS.STRUCTURES] = []
+      this.memoryStorage[STORAGE_KEYS.ALLOWANCES] = []
+      this.memoryStorage[STORAGE_KEYS.EMP_ALLOWANCES] = []
     }
   }
 

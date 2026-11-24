@@ -97,114 +97,70 @@ class EmployeeService {
   }
 
   _initialize() {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      this.memoryStorage = {}
-    }
-    if (!this._getItem(STORAGE_KEYS.DEPARTMENTS, null)) {
-      this._setItem(STORAGE_KEYS.DEPARTMENTS, INITIAL_DEPARTMENTS)
-    }
-    if (!this._getItem(STORAGE_KEYS.SUB_DEPARTMENTS, null)) {
-      this._setItem(STORAGE_KEYS.SUB_DEPARTMENTS, INITIAL_SUB_DEPARTMENTS)
-    }
-    if (!this._getItem(STORAGE_KEYS.TEAMS, null)) {
-      this._setItem(STORAGE_KEYS.TEAMS, INITIAL_TEAMS)
-    }
-    if (!this._getItem(STORAGE_KEYS.DESIGNATIONS, null)) {
-      this._setItem(STORAGE_KEYS.DESIGNATIONS, INITIAL_DESIGNATIONS)
-    }
-    if (!this._getItem(STORAGE_KEYS.EMPLOYEES, null)) {
-      this._setItem(STORAGE_KEYS.EMPLOYEES, CANONICAL_EMPLOYEES)
-    }
-    if (!this._getItem(STORAGE_KEYS.BANK_RECORDS, null)) {
-      this._setItem(STORAGE_KEYS.BANK_RECORDS, INITIAL_BANK_RECORDS)
-    }
-    if (!this._getItem(STORAGE_KEYS.CAREER_HISTORY, null)) {
-      this._setItem(STORAGE_KEYS.CAREER_HISTORY, INITIAL_CAREER_HISTORY)
-    }
-    if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, null)) {
-      this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, INITIAL_TEAM_ASSIGNMENTS)
-    }
-    if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, null)) {
-      this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, [])
-    }
+    this.memoryStorage = {}
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      if (!this._getItem(STORAGE_KEYS.DEPARTMENTS, null)) {
+        this._setItem(STORAGE_KEYS.DEPARTMENTS, INITIAL_DEPARTMENTS)
+      }
+      if (!this._getItem(STORAGE_KEYS.SUB_DEPARTMENTS, null)) {
+        this._setItem(STORAGE_KEYS.SUB_DEPARTMENTS, INITIAL_SUB_DEPARTMENTS)
+      }
+      if (!this._getItem(STORAGE_KEYS.TEAMS, null)) {
+        this._setItem(STORAGE_KEYS.TEAMS, INITIAL_TEAMS)
+      }
+      if (!this._getItem(STORAGE_KEYS.DESIGNATIONS, null)) {
+        this._setItem(STORAGE_KEYS.DESIGNATIONS, INITIAL_DESIGNATIONS)
+      }
+      if (!this._getItem(STORAGE_KEYS.EMPLOYEES, null)) {
+        this._setItem(STORAGE_KEYS.EMPLOYEES, CANONICAL_EMPLOYEES)
+      }
+      if (!this._getItem(STORAGE_KEYS.BANK_RECORDS, null)) {
+        this._setItem(STORAGE_KEYS.BANK_RECORDS, INITIAL_BANK_RECORDS)
+      }
+      if (!this._getItem(STORAGE_KEYS.CAREER_HISTORY, null)) {
+        this._setItem(STORAGE_KEYS.CAREER_HISTORY, INITIAL_CAREER_HISTORY)
+      }
+      if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, null)) {
+        this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENTS, INITIAL_TEAM_ASSIGNMENTS)
+      }
+      if (!this._getItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, null)) {
+        this._setItem(STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY, [])
+      }
 
       // Safe QA Record Self-Healing: Correct 02/11/2026 -> 2026-11-02 for EMP-018 without mutating unrelated employees
       try {
         const empList = this._getItem(STORAGE_KEYS.EMPLOYEES, CANONICAL_EMPLOYEES)
-        let empChanged = false
         if (Array.isArray(empList)) {
           empList.forEach((e) => {
             if (e.id === 'EMP-018' || (e.name && e.name.toLowerCase().includes('huzaifa'))) {
               if (e.joinDate === '2026-02-11' || e.joinDate === '02/11/2026') {
                 e.joinDate = '2026-11-02'
-                empChanged = true
               }
               if (e.designation === 'Full Enginner') {
                 e.designation = 'Senior Full-Stack Developer'
                 e.designationId = 'DESIG-02'
-                empChanged = true
               }
             }
             if (e.joinDate) {
               e.tenureDays = calculateTenureDays(e.joinDate)
             }
           })
-
-          const freshQaVal = this._getItem('isysware_hrms_fresh_qa_mode_active', false)
-          const isFreshQA = freshQaVal === true || freshQaVal === 'true'
-          const isLiveDatabase = empList.some((e) => e.cuid) || empList.length >= 13
-
-          // Remove synthetic non-backend QA employee if live PostgreSQL database is the authority (13 canonical staff)
-          if (empList.some((e) => e.cuid)) {
-            const syntheticIdx = empList.findIndex((e) => e.id === 'EMP-016' && !e.cuid)
-            if (syntheticIdx !== -1) {
-              empList.splice(syntheticIdx, 1)
-              empChanged = true
-            }
-          }
-
-          // Ensure EMP-016 (Ahmed Raza QA) is canonically synchronized only in offline demo environments with < 13 staff
-          if (typeof window !== 'undefined' && !isFreshQA && !isLiveDatabase) {
-            const ahmedIdx = empList.findIndex((e) => e.id === 'EMP-016' || (e.name && e.name.toLowerCase().includes('ahmed raza')))
-            if (ahmedIdx === -1) {
-              empList.push({ ...QA_EMPLOYEE_AHMED_RAZA })
-              empChanged = true
-            } else {
-              const ahmed = empList[ahmedIdx]
-              if (ahmed.managerId !== 'EMP-005' || ahmed.teamId !== 'TEAM-03' || ahmed.departmentId !== 'DEP-01') {
-                ahmed.managerId = 'EMP-005'
-                ahmed.managerName = 'Hina Farooq'
-                ahmed.teamId = 'TEAM-03'
-                ahmed.teamName = 'Quality Assurance & Testing'
-                ahmed.departmentId = 'DEP-01'
-                ahmed.department = 'Development'
-                empChanged = true
-              }
-            }
-          }
-
-          if (empChanged) {
-            this._setItem(STORAGE_KEYS.EMPLOYEES, empList)
-
-            const history = this._getItem(STORAGE_KEYS.CAREER_HISTORY, INITIAL_CAREER_HISTORY)
-            if (Array.isArray(history)) {
-              history.forEach((h) => {
-                if (h.employeeId === 'EMP-018' || (h.newValue && h.newValue.includes('EMP-018'))) {
-                  if (h.effectiveDate === '2026-02-11') {
-                    h.effectiveDate = '2026-11-02'
-                  }
-                  if (h.newValue && h.newValue.includes('Full Enginner')) {
-                    h.newValue = h.newValue.replace('Full Enginner', 'Senior Full-Stack Developer')
-                  }
-                }
-              })
-              this._setItem(STORAGE_KEYS.CAREER_HISTORY, history)
-            }
-          }
         }
-      } catch {
-        // Safe guard against corrupt storage
-      }
+      } catch {}
+    } else {
+      // Clean zero state in browser runtime: strictly zero mock data on startup; wait for live PostgreSQL synchronization
+      this.memoryStorage[STORAGE_KEYS.DEPARTMENTS] = []
+      this.memoryStorage[STORAGE_KEYS.SUB_DEPARTMENTS] = []
+      this.memoryStorage[STORAGE_KEYS.TEAMS] = []
+      this.memoryStorage[STORAGE_KEYS.DESIGNATIONS] = []
+      this.memoryStorage[STORAGE_KEYS.EMPLOYEES] = []
+      this.memoryStorage[STORAGE_KEYS.BANK_RECORDS] = []
+      this.memoryStorage[STORAGE_KEYS.CAREER_HISTORY] = []
+      this.memoryStorage[STORAGE_KEYS.TEAM_ASSIGNMENTS] = []
+      this.memoryStorage[STORAGE_KEYS.TEAM_ASSIGNMENT_HISTORY] = []
+      this.memoryStorage[STORAGE_KEYS.SUCCESSION_HISTORY] = []
+    }
     // Note: Multiple active Team Leads per team are permitted for shared leadership/coverage (Bug 07 / Bug 08).
     // Startup reconciliation must not automatically supersede active co-leads or demote their user accounts.
   }

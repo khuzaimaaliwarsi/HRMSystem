@@ -43,13 +43,19 @@ class CommissionService {
   }
 
   _initialize() {
-    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
-    if (!existingPlans || existingPlans.length === 0) {
-      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_PLANS)))
-    }
-    const existingTx = this._getItem(STORAGE_KEYS.TRANSACTIONS, null)
-    if (!existingTx || existingTx.length === 0) {
-      this._setItem(STORAGE_KEYS.TRANSACTIONS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_TRANSACTIONS)))
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+      if (!existingPlans || existingPlans.length === 0) {
+        this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_PLANS)))
+      }
+      const existingTx = this._getItem(STORAGE_KEYS.TRANSACTIONS, null)
+      if (!existingTx || existingTx.length === 0) {
+        this._setItem(STORAGE_KEYS.TRANSACTIONS, JSON.parse(JSON.stringify(INITIAL_COMMISSION_TRANSACTIONS)))
+      }
+    } else {
+      this.memoryStorage[STORAGE_KEYS.PLANS] = []
+      this.memoryStorage[STORAGE_KEYS.TRANSACTIONS] = []
     }
   }
 

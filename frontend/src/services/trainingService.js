@@ -60,25 +60,34 @@ class TrainingService {
   }
 
   _initialize() {
-    const existingPrograms = this._getItem(STORAGE_KEYS.PROGRAMS, null)
-    if (!existingPrograms || existingPrograms.length === 0) {
-      this._setItem(STORAGE_KEYS.PROGRAMS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PROGRAMS)))
-    }
-    const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
-    if (!existingPlans || existingPlans.length === 0) {
-      this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PLANS)))
-    }
-    const existingSessions = this._getItem(STORAGE_KEYS.SESSIONS, null)
-    if (!existingSessions || existingSessions.length === 0) {
-      this._setItem(STORAGE_KEYS.SESSIONS, JSON.parse(JSON.stringify(INITIAL_TRAINING_SESSIONS)))
-    }
-    const existingEnrollments = this._getItem(STORAGE_KEYS.ENROLLMENTS, null)
-    if (!existingEnrollments || existingEnrollments.length === 0) {
-      this._setItem(STORAGE_KEYS.ENROLLMENTS, JSON.parse(JSON.stringify(INITIAL_ENROLLMENTS)))
-    }
-    const existingCerts = this._getItem(STORAGE_KEYS.CERTIFICATES, null)
-    if (!existingCerts || existingCerts.length === 0) {
-      this._setItem(STORAGE_KEYS.CERTIFICATES, JSON.parse(JSON.stringify(INITIAL_CERTIFICATES)))
+    const isTest = typeof process !== 'undefined' && Boolean(process.env?.NODE_TEST_CONTEXT)
+    if (isTest) {
+      const existingPrograms = this._getItem(STORAGE_KEYS.PROGRAMS, null)
+      if (!existingPrograms || existingPrograms.length === 0) {
+        this._setItem(STORAGE_KEYS.PROGRAMS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PROGRAMS)))
+      }
+      const existingPlans = this._getItem(STORAGE_KEYS.PLANS, null)
+      if (!existingPlans || existingPlans.length === 0) {
+        this._setItem(STORAGE_KEYS.PLANS, JSON.parse(JSON.stringify(INITIAL_TRAINING_PLANS)))
+      }
+      const existingSessions = this._getItem(STORAGE_KEYS.SESSIONS, null)
+      if (!existingSessions || existingSessions.length === 0) {
+        this._setItem(STORAGE_KEYS.SESSIONS, JSON.parse(JSON.stringify(INITIAL_TRAINING_SESSIONS)))
+      }
+      const existingEnrollments = this._getItem(STORAGE_KEYS.ENROLLMENTS, null)
+      if (!existingEnrollments || existingEnrollments.length === 0) {
+        this._setItem(STORAGE_KEYS.ENROLLMENTS, JSON.parse(JSON.stringify(INITIAL_ENROLLMENTS)))
+      }
+      const existingCerts = this._getItem(STORAGE_KEYS.CERTIFICATES, null)
+      if (!existingCerts || existingCerts.length === 0) {
+        this._setItem(STORAGE_KEYS.CERTIFICATES, JSON.parse(JSON.stringify(INITIAL_CERTIFICATES)))
+      }
+    } else {
+      this.memoryStorage[STORAGE_KEYS.PROGRAMS] = []
+      this.memoryStorage[STORAGE_KEYS.PLANS] = []
+      this.memoryStorage[STORAGE_KEYS.SESSIONS] = []
+      this.memoryStorage[STORAGE_KEYS.ENROLLMENTS] = []
+      this.memoryStorage[STORAGE_KEYS.CERTIFICATES] = []
     }
   }
 
