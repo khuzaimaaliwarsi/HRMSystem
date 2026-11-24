@@ -215,7 +215,7 @@ export const dashboardService = {
     const { taskStatus = 'all' } = filters
 
     // Derived directly from canonical employee hierarchy
-    const teamMembers = employeeService?.getAuthorizedTeamEmployees?.(managerId, 'manager') || employeeService?.getDirectReports?.(managerId) || WORKFORCE_MEMBERS.filter((m) => m.managerId === managerId)
+    const teamMembers = employeeService?.getAuthorizedTeamEmployees?.(managerId, 'manager') || employeeService?.getDirectReports?.(managerId) || (isTest ? WORKFORCE_MEMBERS.filter((m) => m.managerId === managerId) : [])
     const directReports = employeeService?.getDirectReports?.(managerId) || teamMembers.filter((m) => m.managerId === managerId)
     const teamCount = teamMembers.length
     const directReportsCount = directReports.length
